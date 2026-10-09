@@ -18,6 +18,7 @@ import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 
+import { hazardsWithColor } from '@/constants/hazards';
 import { Brand, Colors } from '@/constants/theme';
 import { useFloatingTabClearance } from '@/hooks/use-floating-tab-clearance';
 import { pressHaptic } from '@/utils/haptics';
@@ -26,6 +27,9 @@ import { MapPlaceholder } from './map-placeholder';
 
 const C = Colors.light;
 const HAIRLINE = 'rgba(0, 0, 0, 0.06)';
+
+// Resolved once; swap the data source behind `hazardsWithColor` for live reports.
+const HAZARDS_JSON = JSON.stringify(hazardsWithColor());
 
 // Camera centered on the Philippines until a precise fix arrives.
 const CAMERA = {
@@ -171,6 +175,9 @@ function OpenStreetMap({ style }: { style?: StyleProp<ViewStyle> }) {
         androidLayerType="hardware"
         onLoadEnd={() => {
           mapReady.current = true;
+          webViewRef.current?.injectJavaScript(
+            `window.setHazards(${JSON.stringify(HAZARDS_JSON)}); true;`,
+          );
           if (location) placeMarker(location);
         }}
       />
@@ -360,6 +367,15 @@ function buildMapHtml() {
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
       html, body, #map { margin: 0; padding: 0; height: 100%; width: 100%; background: #DCEBF2; }
+      .hazard-pin {
+        width: 26px; height: 26px; border-radius: 13px;
+        border: 2px solid #ffffff; box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+        display: flex; align-items: center; justify-content: center;
+        color: #ffffff; font: 700 13px -apple-system, sans-serif;
+      }
+      .hazard-popup { font: 400 13px -apple-system, sans-serif; min-width: 150px; }
+      .hazard-popup b { display: block; margin-bottom: 2px; font-size: 14px; }
+      .hazard-tag { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; }
     </style>
   </head>
   <body>
@@ -379,6 +395,36 @@ function buildMapHtml() {
       var routeLine = null;
       var fromMarker = null;
       var toMarker = null;
+      var hazardLayer = L.layerGroup().addTo(map);
+
+      function escapeHtml(value) {
+        return String(value).replace(/[&<>"']/g, function (ch) {
+          return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+        });
+      }
+
+      // Called from React Native with the list of street hindrances.
+      window.setHazards = function (json) {
+        hazardLayer.clearLayers();
+        JSON.parse(json).forEach(function (h) {
+          var icon = L.divIcon({
+            className: '',
+            html: '<div class="hazard-pin" style="background:' + h.color + '">!</div>',
+            iconSize: [26, 26],
+            iconAnchor: [13, 13],
+            popupAnchor: [0, -14],
+          });
+          L.marker([h.latitude, h.longitude], { icon: icon })
+            .bindPopup(
+              '<div class="hazard-popup">' +
+                '<span class="hazard-tag" style="color:' + h.color + '">' + escapeHtml(h.label) + '</span>' +
+                '<b>' + escapeHtml(h.title) + '</b>' +
+                escapeHtml(h.description) +
+              '</div>'
+            )
+            .addTo(hazardLayer);
+        });
+      };
 
       // Called from React Native with the device's precise GPS fix.
       window.setUserLocation = function (lat, lng, accuracy) {
