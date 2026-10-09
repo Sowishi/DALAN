@@ -5,7 +5,11 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View } from
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Pressable } from '@/components/haptic-pressable';
-import { LocationPicker, type PinnedLocation } from '@/components/location-picker';
+import {
+  LocationPicker,
+  reverseGeocode,
+  type PinnedLocation,
+} from '@/components/location-picker';
 import { HAZARD_META, REPORT_CATEGORIES, type HazardType } from '@/constants/hazards';
 import { Brand, Colors, Spacing } from '@/constants/theme';
 import { useFloatingTabClearance } from '@/hooks/use-floating-tab-clearance';
@@ -20,6 +24,8 @@ export default function ReportScreen() {
   const [selected, setSelected] = useState<HazardType | null>(null);
   const [details, setDetails] = useState('');
   const [pin, setPin] = useState<PinnedLocation | null>(null);
+  const [pinLabel, setPinLabel] = useState('Finding your location…');
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [focusNonce, setFocusNonce] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,6 +52,20 @@ export default function ReportScreen() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!pin) {
+      setPinLabel('Tap to choose a location');
+      return;
+    }
+    let active = true;
+    void reverseGeocode(pin).then((label) => {
+      if (active) setPinLabel(label);
+    });
+    return () => {
+      active = false;
+    };
+  }, [pin]);
 
   const recenterOnGps = async () => {
     const { status } = await Location.requestForegroundPermissionsAsync();
@@ -136,14 +156,24 @@ export default function ReportScreen() {
 
           <View style={styles.section}>
             <Text style={styles.label}>Location</Text>
-            <LocationPicker
-              location={pin}
-              focusNonce={focusNonce}
-              onChange={setPin}
-              onRecenter={() => {
-                void recenterOnGps();
-              }}
-            />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Choose location on map"
+              onPress={() => setPickerOpen(true)}
+              style={({ pressed }) => [styles.locationRow, pressed && styles.pressed]}>
+              <View style={styles.locationIcon}>
+                <Ionicons name="location" size={18} color={Brand.green} />
+              </View>
+              <View style={styles.locationBody}>
+                <Text style={styles.locationText}>
+                  {pin ? 'Pinned location' : 'Choose location'}
+                </Text>
+                <Text numberOfLines={2} style={styles.locationSub}>
+                  {pinLabel}
+                </Text>
+              </View>
+              <Ionicons name="map-outline" size={18} color={C.textSecondary} />
+            </Pressable>
           </View>
 
           <View style={styles.section}>
@@ -193,6 +223,17 @@ export default function ReportScreen() {
           </Pressable>
         </View>
       </SafeAreaView>
+
+      <LocationPicker
+        visible={pickerOpen}
+        location={pin}
+        focusNonce={focusNonce}
+        onChange={setPin}
+        onRecenter={() => {
+          void recenterOnGps();
+        }}
+        onClose={() => setPickerOpen(false)}
+      />
     </View>
   );
 }
@@ -242,6 +283,25 @@ const styles = StyleSheet.create({
   },
   categoryLabel: { fontSize: 15, fontWeight: '600', color: C.text },
   checkSlot: { position: 'absolute', top: Spacing.two, right: Spacing.two },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+    padding: Spacing.three,
+    borderRadius: Spacing.three,
+    backgroundColor: C.backgroundElement,
+  },
+  locationIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: `${Brand.green}1A`,
+  },
+  locationBody: { flex: 1, gap: 1 },
+  locationText: { fontSize: 15, fontWeight: '600', color: C.text },
+  locationSub: { fontSize: 13, color: C.textSecondary },
   textArea: {
     minHeight: 120,
     borderRadius: Spacing.three,
