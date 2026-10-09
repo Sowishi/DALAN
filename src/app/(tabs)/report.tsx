@@ -1,11 +1,21 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Brand, Colors, Spacing } from '@/constants/theme';
 
 const C = Colors.light;
+
+const MAX_DETAILS = 280;
 
 type Category = {
   key: string;
@@ -22,8 +32,22 @@ const CATEGORIES: Category[] = [
 ];
 
 export default function ReportScreen() {
-  const [selected, setSelected] = useState('flood');
+  const [selected, setSelected] = useState<string | null>(null);
   const [details, setDetails] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const canSubmit = selected !== null && !submitting;
+
+  const handleSubmit = () => {
+    if (!canSubmit) return;
+    setSubmitting(true);
+    // Simulated submission; replace with real API call.
+    setTimeout(() => {
+      setSubmitting(false);
+      setSelected(null);
+      setDetails('');
+    }, 1200);
+  };
 
   return (
     <View style={styles.container}>
@@ -33,54 +57,100 @@ export default function ReportScreen() {
           <Text style={styles.headerSubtitle}>Help the community stay informed</Text>
         </View>
 
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          <Text style={styles.label}>What&apos;s happening?</Text>
-          <View style={styles.grid}>
-            {CATEGORIES.map((cat) => {
-              const isSelected = selected === cat.key;
-              return (
-                <Pressable
-                  key={cat.key}
-                  accessibilityRole="button"
-                  onPress={() => setSelected(cat.key)}
-                  style={[styles.categoryCard, isSelected && styles.categoryCardSelected]}>
-                  <View style={[styles.categoryIcon, { backgroundColor: `${cat.color}22` }]}>
-                    <MaterialCommunityIcons name={cat.icon} size={24} color={cat.color} />
-                  </View>
-                  <Text style={styles.categoryLabel}>{cat.label}</Text>
-                  {isSelected && (
-                    <View style={styles.check}>
-                      <Ionicons name="checkmark-circle" size={20} color={Brand.green} />
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          keyboardDismissMode="interactive">
+          <View style={styles.section}>
+            <Text style={styles.label}>What&apos;s happening?</Text>
+            <View style={styles.grid}>
+              {CATEGORIES.map((cat) => {
+                const isSelected = selected === cat.key;
+                return (
+                  <Pressable
+                    key={cat.key}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isSelected }}
+                    accessibilityLabel={cat.label}
+                    onPress={() => setSelected(cat.key)}
+                    style={({ pressed }) => [
+                      styles.categoryCard,
+                      isSelected && styles.categoryCardSelected,
+                      pressed && styles.pressed,
+                    ]}>
+                    <View style={[styles.categoryIcon, { backgroundColor: `${cat.color}1A` }]}>
+                      <MaterialCommunityIcons name={cat.icon} size={24} color={cat.color} />
                     </View>
-                  )}
-                </Pressable>
-              );
-            })}
+                    <Text style={styles.categoryLabel}>{cat.label}</Text>
+                    <View style={styles.checkSlot}>
+                      {isSelected && (
+                        <Ionicons name="checkmark-circle" size={22} color={Brand.green} />
+                      )}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
 
-          <Text style={styles.label}>Location</Text>
-          <View style={styles.locationRow}>
-            <Ionicons name="location" size={20} color={Brand.green} />
-            <Text style={styles.locationText}>Current location · Metro Manila</Text>
+          <View style={styles.section}>
+            <Text style={styles.label}>Location</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Change location"
+              style={({ pressed }) => [styles.locationRow, pressed && styles.pressed]}>
+              <View style={styles.locationIcon}>
+                <Ionicons name="location" size={18} color={Brand.green} />
+              </View>
+              <View style={styles.locationBody}>
+                <Text style={styles.locationText}>Current location</Text>
+                <Text style={styles.locationSub}>Metro Manila</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={C.textSecondary} />
+            </Pressable>
           </View>
 
-          <Text style={styles.label}>Details</Text>
-          <TextInput
-            value={details}
-            onChangeText={setDetails}
-            placeholder="Add a short description..."
-            placeholderTextColor={C.textSecondary}
-            multiline
-            style={styles.textArea}
-          />
+          <View style={styles.section}>
+            <View style={styles.labelRow}>
+              <Text style={styles.label}>Details</Text>
+              <Text style={styles.counter}>
+                {details.length}/{MAX_DETAILS}
+              </Text>
+            </View>
+            <TextInput
+              value={details}
+              onChangeText={setDetails}
+              placeholder="Add a short description..."
+              placeholderTextColor={C.textSecondary}
+              multiline
+              maxLength={MAX_DETAILS}
+              style={styles.textArea}
+            />
+          </View>
+        </ScrollView>
 
+        <View style={styles.footer}>
           <Pressable
             accessibilityRole="button"
-            style={({ pressed }) => [styles.submit, { opacity: pressed ? 0.85 : 1 }]}>
-            <Ionicons name="send" size={18} color={Brand.white} />
-            <Text style={styles.submitLabel}>Submit Report</Text>
+            accessibilityLabel="Submit report"
+            accessibilityState={{ disabled: !canSubmit, busy: submitting }}
+            disabled={!canSubmit}
+            onPress={handleSubmit}
+            style={({ pressed }) => [
+              styles.submit,
+              !canSubmit && styles.submitDisabled,
+              pressed && canSubmit && styles.pressed,
+            ]}>
+            {submitting ? (
+              <ActivityIndicator color={Brand.white} />
+            ) : (
+              <>
+                <Ionicons name="send" size={18} color={Brand.white} />
+                <Text style={styles.submitLabel}>Submit report</Text>
+              </>
+            )}
           </Pressable>
-        </ScrollView>
+        </View>
       </SafeAreaView>
     </View>
   );
@@ -91,18 +161,17 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   header: {
     paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    gap: 2,
+    paddingTop: Spacing.two,
+    paddingBottom: Spacing.three,
+    gap: Spacing.half,
   },
-  headerTitle: { fontSize: 28, fontWeight: '700', color: C.text },
-  headerSubtitle: { fontSize: 14, color: C.textSecondary },
-  content: { padding: Spacing.three, gap: Spacing.two },
-  label: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: C.text,
-    marginTop: Spacing.two,
-  },
+  headerTitle: { fontSize: 32, fontWeight: '700', color: C.text, letterSpacing: -0.5 },
+  headerSubtitle: { fontSize: 15, color: C.textSecondary },
+  content: { paddingHorizontal: Spacing.three, paddingBottom: Spacing.five, gap: Spacing.four },
+  section: { gap: Spacing.two },
+  label: { fontSize: 15, fontWeight: '600', color: C.text },
+  labelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  counter: { fontSize: 13, color: C.textSecondary },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -111,16 +180,17 @@ const styles = StyleSheet.create({
   categoryCard: {
     width: '48%',
     flexGrow: 1,
+    minHeight: 96,
     padding: Spacing.three,
     borderRadius: Spacing.three,
     backgroundColor: C.backgroundElement,
-    borderWidth: 1.5,
-    borderColor: C.backgroundSelected,
+    borderWidth: 1,
+    borderColor: 'transparent',
     gap: Spacing.two,
   },
   categoryCardSelected: {
     borderColor: Brand.green,
-    backgroundColor: C.background,
+    backgroundColor: `${Brand.green}0D`,
   },
   categoryIcon: {
     width: 44,
@@ -130,28 +200,40 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   categoryLabel: { fontSize: 15, fontWeight: '600', color: C.text },
-  check: { position: 'absolute', top: Spacing.two, right: Spacing.two },
+  checkSlot: { position: 'absolute', top: Spacing.two, right: Spacing.two },
   locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.two,
+    gap: Spacing.three,
     padding: Spacing.three,
     borderRadius: Spacing.three,
     backgroundColor: C.backgroundElement,
-    borderWidth: 1,
-    borderColor: C.backgroundSelected,
   },
-  locationText: { fontSize: 14, color: C.text },
+  locationIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: `${Brand.green}1A`,
+  },
+  locationBody: { flex: 1, gap: 1 },
+  locationText: { fontSize: 15, fontWeight: '600', color: C.text },
+  locationSub: { fontSize: 13, color: C.textSecondary },
   textArea: {
-    minHeight: 100,
+    minHeight: 120,
     borderRadius: Spacing.three,
     padding: Spacing.three,
     fontSize: 15,
+    lineHeight: 21,
     color: C.text,
     backgroundColor: C.backgroundElement,
-    borderWidth: 1,
-    borderColor: C.backgroundSelected,
     textAlignVertical: 'top',
+  },
+  footer: {
+    paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.two,
+    paddingBottom: Spacing.two,
   },
   submit: {
     flexDirection: 'row',
@@ -161,7 +243,8 @@ const styles = StyleSheet.create({
     height: 52,
     borderRadius: Spacing.three,
     backgroundColor: Brand.green,
-    marginTop: Spacing.three,
   },
+  submitDisabled: { opacity: 0.4 },
   submitLabel: { fontSize: 16, fontWeight: '700', color: Brand.white },
+  pressed: { opacity: 0.7 },
 });

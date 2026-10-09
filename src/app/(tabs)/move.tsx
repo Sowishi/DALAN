@@ -26,8 +26,20 @@ const STATS = [
   { key: 'kcal', label: 'Calories', value: '0', unit: 'kcal' },
 ];
 
+const WEEKLY = [
+  {
+    key: 'dist',
+    label: 'Distance',
+    value: '18.4 km',
+    icon: 'map-marker-distance' as const,
+    color: Brand.green,
+  },
+  { key: 'kcal', label: 'Calories', value: '1,240', icon: 'fire' as const, color: '#F76808' },
+];
+
 export default function MoveScreen() {
   const [mode, setMode] = useState('run');
+  const [running, setRunning] = useState(false);
 
   return (
     <View style={styles.container}>
@@ -45,8 +57,14 @@ export default function MoveScreen() {
                 <Pressable
                   key={m.key}
                   accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  accessibilityLabel={m.label}
                   onPress={() => setMode(m.key)}
-                  style={[styles.modeChip, selected && styles.modeChipActive]}>
+                  style={({ pressed }) => [
+                    styles.modeChip,
+                    selected && styles.modeChipActive,
+                    pressed && styles.pressed,
+                  ]}>
                   <MaterialCommunityIcons
                     name={m.icon}
                     size={22}
@@ -64,31 +82,40 @@ export default function MoveScreen() {
             {STATS.map((s) => (
               <View key={s.key} style={styles.stat}>
                 <Text style={styles.statValue}>{s.value}</Text>
-                <Text style={styles.statLabel}>
-                  {s.unit ? `${s.label} (${s.unit})` : s.label}
-                </Text>
+                <Text style={styles.statLabel}>{s.unit ? `${s.label} (${s.unit})` : s.label}</Text>
               </View>
             ))}
           </View>
 
           <Pressable
             accessibilityRole="button"
-            style={({ pressed }) => [styles.startButton, { opacity: pressed ? 0.9 : 1 }]}>
-            <MaterialCommunityIcons name="play" size={28} color={Brand.white} />
-            <Text style={styles.startLabel}>Start</Text>
+            accessibilityLabel={running ? 'Pause activity' : 'Start activity'}
+            onPress={() => setRunning((r) => !r)}
+            style={({ pressed }) => [
+              styles.startButton,
+              running && styles.startButtonActive,
+              pressed && styles.pressed,
+            ]}>
+            <MaterialCommunityIcons
+              name={running ? 'pause' : 'play'}
+              size={28}
+              color={Brand.white}
+            />
+            <Text style={styles.startLabel}>{running ? 'Pause' : 'Start'}</Text>
           </Pressable>
 
-          <Text style={styles.sectionTitle}>This week</Text>
-          <View style={styles.summaryRow}>
-            <View style={styles.summaryCard}>
-              <MaterialCommunityIcons name="map-marker-distance" size={22} color={Brand.green} />
-              <Text style={styles.summaryValue}>18.4 km</Text>
-              <Text style={styles.summaryLabel}>Distance</Text>
-            </View>
-            <View style={styles.summaryCard}>
-              <MaterialCommunityIcons name="fire" size={22} color={Brand.yellow} />
-              <Text style={styles.summaryValue}>1,240</Text>
-              <Text style={styles.summaryLabel}>Calories</Text>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>This week</Text>
+            <View style={styles.summaryRow}>
+              {WEEKLY.map((w) => (
+                <View key={w.key} style={styles.summaryCard}>
+                  <View style={[styles.summaryIcon, { backgroundColor: `${w.color}1A` }]}>
+                    <MaterialCommunityIcons name={w.icon} size={20} color={w.color} />
+                  </View>
+                  <Text style={styles.summaryValue}>{w.value}</Text>
+                  <Text style={styles.summaryLabel}>{w.label}</Text>
+                </View>
+              ))}
             </View>
           </View>
         </ScrollView>
@@ -100,10 +127,15 @@ export default function MoveScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.background },
   flex: { flex: 1 },
-  header: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, gap: 2 },
-  headerTitle: { fontSize: 28, fontWeight: '700', color: C.text },
-  headerSubtitle: { fontSize: 14, color: C.textSecondary },
-  content: { padding: Spacing.three, gap: Spacing.three },
+  header: {
+    paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.two,
+    paddingBottom: Spacing.three,
+    gap: Spacing.half,
+  },
+  headerTitle: { fontSize: 32, fontWeight: '700', color: C.text, letterSpacing: -0.5 },
+  headerSubtitle: { fontSize: 15, color: C.textSecondary },
+  content: { paddingHorizontal: Spacing.three, paddingBottom: Spacing.five, gap: Spacing.four },
   modeRow: { flexDirection: 'row', gap: Spacing.two },
   modeChip: {
     flex: 1,
@@ -112,10 +144,8 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.three,
     borderRadius: Spacing.three,
     backgroundColor: C.backgroundElement,
-    borderWidth: 1.5,
-    borderColor: C.backgroundSelected,
   },
-  modeChipActive: { backgroundColor: Brand.green, borderColor: Brand.green },
+  modeChipActive: { backgroundColor: Brand.green },
   modeLabel: { fontSize: 13, fontWeight: '600', color: C.text },
   modeLabelActive: { color: Brand.white },
   statsCard: {
@@ -124,11 +154,9 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.four,
     borderRadius: Spacing.four,
     backgroundColor: C.backgroundElement,
-    borderWidth: 1,
-    borderColor: C.backgroundSelected,
   },
   stat: { alignItems: 'center', gap: Spacing.one },
-  statValue: { fontSize: 26, fontWeight: '700', color: C.text },
+  statValue: { fontSize: 28, fontWeight: '700', color: C.text, letterSpacing: -0.5 },
   statLabel: { fontSize: 12, color: C.textSecondary },
   startButton: {
     flexDirection: 'row',
@@ -139,18 +167,26 @@ const styles = StyleSheet.create({
     borderRadius: 32,
     backgroundColor: Brand.green,
   },
+  startButtonActive: { backgroundColor: '#F76808' },
   startLabel: { fontSize: 18, fontWeight: '700', color: Brand.white },
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: C.text, marginTop: Spacing.one },
+  section: { gap: Spacing.two },
+  sectionTitle: { fontSize: 20, fontWeight: '700', color: C.text, letterSpacing: -0.3 },
   summaryRow: { flexDirection: 'row', gap: Spacing.three },
   summaryCard: {
     flex: 1,
     padding: Spacing.three,
     borderRadius: Spacing.three,
     backgroundColor: C.backgroundElement,
-    borderWidth: 1,
-    borderColor: C.backgroundSelected,
-    gap: Spacing.one,
+    gap: Spacing.two,
   },
-  summaryValue: { fontSize: 20, fontWeight: '700', color: C.text },
+  summaryIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  summaryValue: { fontSize: 22, fontWeight: '700', color: C.text, letterSpacing: -0.3 },
   summaryLabel: { fontSize: 13, color: C.textSecondary },
+  pressed: { opacity: 0.7 },
 });

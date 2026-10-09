@@ -1,5 +1,5 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Brand, Colors, Spacing } from '@/constants/theme';
@@ -59,18 +59,30 @@ const ALERTS: Alert[] = [
 ];
 
 export default function AlertsScreen() {
+  const unreadCount = ALERTS.filter((a) => a.unread).length;
+
   return (
     <View style={styles.container}>
       <SafeAreaView edges={['top']} style={styles.flex}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Alerts</Text>
-          <Text style={styles.headerSubtitle}>Latest reports near you</Text>
+          <Text style={styles.headerSubtitle}>
+            {unreadCount > 0
+              ? `${unreadCount} new ${unreadCount === 1 ? 'report' : 'reports'} near you`
+              : 'Latest reports near you'}
+          </Text>
         </View>
 
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           {ALERTS.map((a) => (
-            <View key={a.key} style={styles.row}>
-              <View style={[styles.iconWrap, { backgroundColor: `${a.color}22` }]}>
+            <Pressable
+              key={a.key}
+              accessibilityRole="button"
+              accessibilityLabel={`${a.type} at ${a.title}, ${a.location}, ${a.time}${
+                a.unread ? ', unread' : ''
+              }`}
+              style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
+              <View style={[styles.iconWrap, { backgroundColor: `${a.color}1A` }]}>
                 <MaterialCommunityIcons name={a.icon} size={24} color={a.color} />
               </View>
               <View style={styles.body}>
@@ -79,14 +91,17 @@ export default function AlertsScreen() {
                   <Text style={styles.time}>{a.time}</Text>
                 </View>
                 <Text style={styles.title}>{a.title}</Text>
-                <Text style={styles.location}>{a.location}</Text>
+                <View style={styles.locationRow}>
+                  <Ionicons name="location-outline" size={13} color={C.textSecondary} />
+                  <Text style={styles.location}>{a.location}</Text>
+                </View>
               </View>
               {a.unread ? (
-                <View style={styles.unreadDot} />
+                <View style={styles.unreadDot} accessibilityLabel="Unread" />
               ) : (
                 <Ionicons name="chevron-forward" size={18} color={C.textSecondary} />
               )}
-            </View>
+            </Pressable>
           ))}
         </ScrollView>
       </SafeAreaView>
@@ -97,10 +112,15 @@ export default function AlertsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.background },
   flex: { flex: 1 },
-  header: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, gap: 2 },
-  headerTitle: { fontSize: 28, fontWeight: '700', color: C.text },
-  headerSubtitle: { fontSize: 14, color: C.textSecondary },
-  content: { padding: Spacing.three, gap: Spacing.two },
+  header: {
+    paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.two,
+    paddingBottom: Spacing.three,
+    gap: Spacing.half,
+  },
+  headerTitle: { fontSize: 32, fontWeight: '700', color: C.text, letterSpacing: -0.5 },
+  headerSubtitle: { fontSize: 15, color: C.textSecondary },
+  content: { paddingHorizontal: Spacing.three, paddingBottom: Spacing.five, gap: Spacing.two },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -108,8 +128,6 @@ const styles = StyleSheet.create({
     padding: Spacing.three,
     borderRadius: Spacing.three,
     backgroundColor: C.backgroundElement,
-    borderWidth: 1,
-    borderColor: C.backgroundSelected,
   },
   iconWrap: {
     width: 48,
@@ -122,7 +140,8 @@ const styles = StyleSheet.create({
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   type: { fontSize: 12, fontWeight: '700' },
   time: { fontSize: 12, color: C.textSecondary },
-  title: { fontSize: 15, fontWeight: '700', color: C.text },
+  title: { fontSize: 16, fontWeight: '700', color: C.text, letterSpacing: -0.2 },
+  locationRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.half },
   location: { fontSize: 13, color: C.textSecondary },
   unreadDot: {
     width: 10,
@@ -130,4 +149,5 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: Brand.green,
   },
+  pressed: { opacity: 0.7 },
 });
