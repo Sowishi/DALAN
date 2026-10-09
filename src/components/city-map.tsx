@@ -18,6 +18,21 @@ import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 
+type MagnetometerModule = typeof import('expo-sensors').Magnetometer;
+
+/**
+ * Loads the magnetometer only when its native module is present. In Expo Go the
+ * native module is missing, so this returns null instead of crashing the app.
+ */
+function getMagnetometer(): MagnetometerModule | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require('expo-sensors').Magnetometer as MagnetometerModule;
+  } catch {
+    return null;
+  }
+}
+
 import { hazardsWithColor } from '@/constants/hazards';
 import { Brand, Colors } from '@/constants/theme';
 import { useFloatingTabClearance } from '@/hooks/use-floating-tab-clearance';
@@ -95,8 +110,11 @@ function OpenStreetMap({ style }: { style?: StyleProp<ViewStyle> }) {
   const [driving, setDriving] = useState(false);
   const [nav, setNav] = useState<NavInfo | null>(null);
   const watchRef = useRef<Location.LocationSubscription | null>(null);
+  const magnetometerRef = useRef<{ remove: () => void } | null>(null);
   const routeRef = useRef<Route | null>(null);
   const stepIndexRef = useRef(1);
+  // Compass heading (degrees, 0 = north) from the magnetometer.
+  const headingRef = useRef<number | null>(null);
 
   const query = activeField === 'from' ? fromText : activeField === 'to' ? toText : '';
   const { suggestions, loading: loadingSuggestions } = usePlaceSuggestions(query, activeField !== null);
@@ -148,12 +166,13 @@ function OpenStreetMap({ style }: { style?: StyleProp<ViewStyle> }) {
   const stopDrive = useCallback(() => {
     watchRef.current?.remove();
     watchRef.current = null;
+    stopCompass();
     setDriving(false);
     setNav(null);
     webViewRef.current?.injectJavaScript('window.endDrive && window.endDrive(); true;');
   }, []);
 
-  const updateDrive = useCallback((user: Coordinate) => {
+  const updateDrive = useCallback((user: Coordinate, heading?: number | null) => {
     const current = routeRef.current;
     if (!current || current.steps.length === 0) return;
 
@@ -178,8 +197,46 @@ function OpenStreetMap({ style }: { style?: StyleProp<ViewStyle> }) {
       eta: speed > 0 ? remaining / speed : 0,
     });
 
-    webViewRef.current?.injectJavaScript(`window.follow(${user.latitude}, ${user.longitude}); true;`);
+    // Prefer the magnetometer compass; fall back to the GPS course while moving.
+    const effectiveHeading = headingRef.current ?? heading ?? null;
+    const headingArg = effectiveHeading == null ? 'null' : effectiveHeading;
+    webViewRef.current?.injectJavaScript(
+      `window.follow(${user.latitude}, ${user.longitude}, ${headingArg}); true;`,
+    );
   }, []);
+
+  const startCompass = async () => {
+    const Magnetometer = getMagnetometer();
+    if (!Magnetometer) return;
+
+    const available = await Magnetometer.isAvailableAsync();
+    if (!available) return;
+
+    // Slow the sensor down; smoothing below does the rest of the easing.
+    Magnetometer.setUpdateInterval(200);
+    magnetometerRef.current = Magnetometer.addListener(({ x, y }) => {
+      // Magnetic heading: 0 = north, 90 = east, 180 = south, 270 = west.
+      const degrees = (Math.atan2(y, x) * 180) / Math.PI;
+      const raw = (degrees + 360) % 360;
+
+      const prev = headingRef.current;
+      // Low-pass filter across the 0/360 wrap so the beam eases instead of jittering.
+      const smoothed =
+        prev == null ? raw : (prev + ((((raw - prev) % 360) + 540) % 360) - 180) * 0.15 + 360) % 360;
+
+      // Skip tiny changes so the beam stays calm when the phone is nearly still.
+      if (prev != null && Math.abs((((smoothed - prev) % 360) + 540) % 360 - 180) < 1) return;
+
+      headingRef.current = smoothed;
+      webViewRef.current?.injectJavaScript(`window.setHeading(${smoothed}); true;`);
+    });
+  };
+
+  const stopCompass = () => {
+    magnetometerRef.current?.remove();
+    magnetometerRef.current = null;
+    headingRef.current = null;
+  };
 
   const startDrive = async () => {
     if (!route) return;
@@ -195,6 +252,7 @@ function OpenStreetMap({ style }: { style?: StyleProp<ViewStyle> }) {
     stepIndexRef.current = 1;
     setDriving(true);
 
+    void startCompass();
     if (location) updateDrive(location);
 
     watchRef.current = await Location.watchPositionAsync(
@@ -204,16 +262,21 @@ function OpenStreetMap({ style }: { style?: StyleProp<ViewStyle> }) {
         timeInterval: 1000,
       },
       (loc) => {
-        updateDrive({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+        updateDrive(
+          { latitude: loc.coords.latitude, longitude: loc.coords.longitude },
+          loc.coords.heading,
+        );
       },
     );
   };
 
-  // Stop watching location if the map unmounts mid-drive.
+  // Stop watching location and the compass if the map unmounts mid-drive.
   useEffect(() => {
     return () => {
       watchRef.current?.remove();
       watchRef.current = null;
+      magnetometerRef.current?.remove();
+      magnetometerRef.current = null;
     };
   }, []);
 
@@ -652,6 +715,18 @@ function buildMapHtml() {
       .hazard-popup { font: 400 13px -apple-system, sans-serif; min-width: 150px; }
       .hazard-popup b { display: block; margin-bottom: 2px; font-size: 14px; }
       .hazard-tag { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; }
+      .nav-puck { width: 72px; height: 72px; }
+      .nav-beam {
+        position: absolute; left: 0; top: 0; width: 72px; height: 72px;
+        background: linear-gradient(to top, rgba(1,81,68,0.55), rgba(1,81,68,0));
+        clip-path: polygon(50% 50%, 22% 0, 78% 0);
+      }
+      .nav-dot {
+        position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+        width: 18px; height: 18px; border-radius: 9px;
+        background: #015144; border: 3px solid #ffffff;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+      }
     </style>
   </head>
   <body>
@@ -734,17 +809,47 @@ function buildMapHtml() {
         if (toMarker) { map.removeLayer(toMarker); toMarker = null; }
       };
 
-      // Drive mode: keep the map centered and zoomed on the moving user.
-      window.follow = function (lat, lng) {
+      var driveMarker = null;
+      var drivePuckIcon = L.divIcon({
+        className: '',
+        html: '<div class="nav-puck"><div id="nav-beam" class="nav-beam"></div><div class="nav-dot"></div></div>',
+        iconSize: [72, 72],
+        iconAnchor: [36, 36],
+      });
+
+      // Rotate only the flashlight beam to the phone's heading; the map stays north-up.
+      function pointBeam(heading) {
+        var beam = document.getElementById('nav-beam');
+        if (beam && heading != null && heading >= 0) {
+          beam.style.transition = 'transform 0.25s linear';
+          beam.style.transform = 'rotate(' + heading + 'deg)';
+        }
+      }
+
+      // Drive mode: keep the map centered, zoomed, and rotated heading-up.
+      window.follow = function (lat, lng, heading) {
         var latlng = L.latLng(lat, lng);
-        if (userMarker) { userMarker.setLatLng(latlng); }
-        else { userMarker = L.circleMarker(latlng, { radius: 8, color: '#ffffff', weight: 3, fillColor: '#015144', fillOpacity: 1 }).addTo(map); }
+        // Only the orientation puck should be visible while driving.
         if (userCircle) { map.removeLayer(userCircle); userCircle = null; }
+        if (userMarker) { map.removeLayer(userMarker); userMarker = null; }
+        if (fromMarker) { map.removeLayer(fromMarker); fromMarker = null; }
+        if (toMarker) { map.removeLayer(toMarker); toMarker = null; }
+
+        if (driveMarker) { driveMarker.setLatLng(latlng); }
+        else { driveMarker = L.marker(latlng, { icon: drivePuckIcon }).addTo(map); }
+
+        pointBeam(heading);
         map.setView(latlng, 17, { animate: true, duration: 0.5 });
+      };
+
+      // Point the flashlight beam at the phone's compass heading; the map stays put.
+      window.setHeading = function (heading) {
+        pointBeam(heading);
       };
 
       // Leave drive mode and re-fit the whole route.
       window.endDrive = function () {
+        if (driveMarker) { map.removeLayer(driveMarker); driveMarker = null; }
         if (routeLine) { map.fitBounds(routeLine.getBounds(), { padding: [48, 48] }); }
       };
     </script>
