@@ -49,6 +49,22 @@ type Place = Coordinate & { label: string };
 
 type FieldKey = 'from' | 'to';
 
+type RouteStep = Coordinate & { instruction: string; distance: number };
+
+type Route = {
+  coords: number[][]; // [lon, lat] pairs
+  steps: RouteStep[];
+  distance: number; // meters
+  duration: number; // seconds
+};
+
+type NavInfo = {
+  instruction: string;
+  stepDistance: number; // meters to the next maneuver
+  remaining: number; // meters to destination
+  eta: number; // seconds remaining
+};
+
 export function CityMap({ style }: { style?: StyleProp<ViewStyle> }) {
   // react-native-webview has no web implementation; fall back to a plain view.
   if (Platform.OS !== 'ios' && Platform.OS !== 'android') {
@@ -74,6 +90,14 @@ function OpenStreetMap({ style }: { style?: StyleProp<ViewStyle> }) {
   const [routing, setRouting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Drive (turn-by-turn) mode.
+  const [route, setRoute] = useState<Route | null>(null);
+  const [driving, setDriving] = useState(false);
+  const [nav, setNav] = useState<NavInfo | null>(null);
+  const watchRef = useRef<Location.LocationSubscription | null>(null);
+  const routeRef = useRef<Route | null>(null);
+  const stepIndexRef = useRef(1);
+
   const query = activeField === 'from' ? fromText : activeField === 'to' ? toText : '';
   const { suggestions, loading: loadingSuggestions } = usePlaceSuggestions(query, activeField !== null);
 
@@ -93,6 +117,105 @@ function OpenStreetMap({ style }: { style?: StyleProp<ViewStyle> }) {
     pressHaptic();
     if (location) placeMarker(location);
   };
+
+  const useCurrentAsFrom = () => {
+    if (!location) return;
+    pressHaptic();
+    setFromText('My location');
+    setFromCoord({ latitude: location.latitude, longitude: location.longitude });
+    setActiveField(null);
+    Keyboard.dismiss();
+    placeMarker(location);
+  };
+
+  const drawRoute = useCallback((from: Coordinate, to: Coordinate, coords: number[][]) => {
+    const coordsJson = JSON.stringify(coords);
+    webViewRef.current?.injectJavaScript(
+      `window.setRoute(${from.latitude}, ${from.longitude}, ${to.latitude}, ${to.longitude}, ${JSON.stringify(
+        coordsJson,
+      )}); true;`,
+    );
+  }, []);
+
+  const clearRoute = () => {
+    pressHaptic();
+    setRoute(null);
+    routeRef.current = null;
+    setNav(null);
+    webViewRef.current?.injectJavaScript('window.clearRoute && window.clearRoute(); true;');
+  };
+
+  const stopDrive = useCallback(() => {
+    watchRef.current?.remove();
+    watchRef.current = null;
+    setDriving(false);
+    setNav(null);
+    webViewRef.current?.injectJavaScript('window.endDrive && window.endDrive(); true;');
+  }, []);
+
+  const updateDrive = useCallback((user: Coordinate) => {
+    const current = routeRef.current;
+    if (!current || current.steps.length === 0) return;
+
+    const steps = current.steps;
+    let idx = stepIndexRef.current;
+    // Advance past maneuvers we're already on top of.
+    while (idx < steps.length - 1 && distanceMeters(user, steps[idx]) < 25) {
+      idx += 1;
+    }
+    stepIndexRef.current = idx;
+
+    let remaining = distanceMeters(user, steps[idx]);
+    for (let i = idx; i < steps.length; i += 1) {
+      remaining += steps[i].distance;
+    }
+
+    const speed = current.duration > 0 ? current.distance / current.duration : 8; // m/s
+    setNav({
+      instruction: steps[idx].instruction,
+      stepDistance: distanceMeters(user, steps[idx]),
+      remaining,
+      eta: speed > 0 ? remaining / speed : 0,
+    });
+
+    webViewRef.current?.injectJavaScript(`window.follow(${user.latitude}, ${user.longitude}); true;`);
+  }, []);
+
+  const startDrive = async () => {
+    if (!route) return;
+    pressHaptic();
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== Location.PermissionStatus.GRANTED) {
+      setError('Location permission is needed for drive mode.');
+      return;
+    }
+
+    setActiveField(null);
+    Keyboard.dismiss();
+    stepIndexRef.current = 1;
+    setDriving(true);
+
+    if (location) updateDrive(location);
+
+    watchRef.current = await Location.watchPositionAsync(
+      {
+        accuracy: Location.Accuracy.BestForNavigation,
+        distanceInterval: 5,
+        timeInterval: 1000,
+      },
+      (loc) => {
+        updateDrive({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+      },
+    );
+  };
+
+  // Stop watching location if the map unmounts mid-drive.
+  useEffect(() => {
+    return () => {
+      watchRef.current?.remove();
+      watchRef.current = null;
+    };
+  }, []);
 
   const handleChange = (field: FieldKey, text: string) => {
     if (field === 'from') {
@@ -141,18 +264,15 @@ function OpenStreetMap({ style }: { style?: StyleProp<ViewStyle> }) {
         return;
       }
 
-      const coords = await fetchRoute(from, to);
-      if (!coords) {
+      const result = await fetchRoute(from, to);
+      if (!result) {
         setError('No route found between those points.');
         return;
       }
 
-      const coordsJson = JSON.stringify(coords);
-      webViewRef.current?.injectJavaScript(
-        `window.setRoute(${from.latitude}, ${from.longitude}, ${to.latitude}, ${to.longitude}, ${JSON.stringify(
-          coordsJson,
-        )}); true;`,
-      );
+      setRoute(result);
+      routeRef.current = result;
+      drawRoute(from, to, result.coords);
     } catch {
       setError('Something went wrong. Check your connection.');
     } finally {
@@ -183,6 +303,7 @@ function OpenStreetMap({ style }: { style?: StyleProp<ViewStyle> }) {
       />
 
       {/* Directions panel */}
+      {!driving ? (
       <View style={[styles.panel, { top: insets.top + 12 }]}>
         <View style={styles.field}>
           <Ionicons name="ellipse" size={12} color={Brand.green} style={styles.fieldIcon} />
@@ -195,6 +316,16 @@ function OpenStreetMap({ style }: { style?: StyleProp<ViewStyle> }) {
             style={styles.input}
             returnKeyType="next"
           />
+          {location ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Use current location"
+              onPress={useCurrentAsFrom}
+              hitSlop={8}
+              style={({ pressed }) => [styles.fromLocate, pressed && styles.fromLocatePressed]}>
+              <Ionicons name="locate" size={18} color={Brand.green} />
+            </Pressable>
+          ) : null}
         </View>
         <View style={styles.divider} />
         <View style={styles.field}>
@@ -257,8 +388,67 @@ function OpenStreetMap({ style }: { style?: StyleProp<ViewStyle> }) {
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
       </View>
+      ) : null}
 
-      {location ? (
+      {/* Drive-mode top banner: next maneuver */}
+      {driving && nav ? (
+        <View style={[styles.navBanner, { top: insets.top + 12 }]}>
+          <View style={styles.navManeuverIcon}>
+            <Ionicons name="navigate" size={22} color={Brand.white} />
+          </View>
+          <View style={styles.navBannerBody}>
+            <Text style={styles.navDistance}>{formatDistance(nav.stepDistance)}</Text>
+            <Text numberOfLines={2} style={styles.navInstruction}>
+              {nav.instruction}
+            </Text>
+          </View>
+        </View>
+      ) : null}
+
+      {/* Route summary with Start drive button */}
+      {route && !driving ? (
+        <View style={[styles.routeCard, { bottom: clearance + 16 }]}>
+          <View style={styles.routeInfo}>
+            <Text style={styles.routeEta}>{formatDuration(route.duration)}</Text>
+            <Text style={styles.routeDistance}>{formatDistance(route.distance)}</Text>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Start drive"
+            onPress={startDrive}
+            style={({ pressed }) => [styles.startButton, pressed && styles.goButtonPressed]}>
+            <Ionicons name="navigate" size={18} color={Brand.white} />
+            <Text style={styles.startLabel}>Start</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Clear route"
+            onPress={clearRoute}
+            hitSlop={8}
+            style={({ pressed }) => [styles.routeClose, pressed && styles.fromLocatePressed]}>
+            <Ionicons name="close" size={20} color={C.textSecondary} />
+          </Pressable>
+        </View>
+      ) : null}
+
+      {/* Drive-mode bottom bar: ETA, remaining, End */}
+      {driving && nav ? (
+        <View style={[styles.navFooter, { bottom: clearance + 16 }]}>
+          <View style={styles.navFooterInfo}>
+            <Text style={styles.navEta}>{formatDuration(nav.eta)}</Text>
+            <Text style={styles.navRemaining}>{formatDistance(nav.remaining)} left</Text>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="End drive"
+            onPress={stopDrive}
+            style={({ pressed }) => [styles.endButton, pressed && styles.goButtonPressed]}>
+            <Text style={styles.endLabel}>End</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {location && !driving && !route ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Center on my location"
@@ -346,16 +536,102 @@ async function geocode(query: string): Promise<Coordinate | null> {
   return { latitude: results[0].latitude, longitude: results[0].longitude };
 }
 
-/** Fetches a driving route from the OSRM service. Returns [lon, lat] pairs. */
-async function fetchRoute(from: Coordinate, to: Coordinate): Promise<number[][] | null> {
-  const url = `https://router.project-osrm.org/route/v1/driving/${from.longitude},${from.latitude};${to.longitude},${to.latitude}?overview=full&geometries=geojson`;
+type OsrmManeuver = { location: number[]; type?: string; modifier?: string };
+type OsrmStep = { name?: string; distance: number; maneuver: OsrmManeuver };
+
+/** Fetches a driving route (with turn-by-turn steps) from the OSRM service. */
+async function fetchRoute(from: Coordinate, to: Coordinate): Promise<Route | null> {
+  const url = `https://router.project-osrm.org/route/v1/driving/${from.longitude},${from.latitude};${to.longitude},${to.latitude}?overview=full&geometries=geojson&steps=true`;
   const res = await fetch(url);
   const data = (await res.json()) as {
     code: string;
-    routes?: { geometry: { coordinates: number[][] } }[];
+    routes?: {
+      distance: number;
+      duration: number;
+      geometry: { coordinates: number[][] };
+      legs: { steps: OsrmStep[] }[];
+    }[];
   };
   if (data.code !== 'Ok' || !data.routes?.length) return null;
-  return data.routes[0].geometry.coordinates;
+
+  const route = data.routes[0];
+  const steps: RouteStep[] = [];
+  route.legs.forEach((leg) => {
+    leg.steps.forEach((step) => {
+      steps.push({
+        instruction: formatInstruction(step),
+        distance: step.distance,
+        latitude: step.maneuver.location[1],
+        longitude: step.maneuver.location[0],
+      });
+    });
+  });
+
+  return {
+    coords: route.geometry.coordinates,
+    steps,
+    distance: route.distance,
+    duration: route.duration,
+  };
+}
+
+/** Builds a short human-readable instruction from an OSRM step. */
+function formatInstruction(step: OsrmStep): string {
+  const { type, modifier } = step.maneuver;
+  const onto = step.name ? ` onto ${step.name}` : '';
+  const on = step.name ? ` on ${step.name}` : '';
+
+  switch (type) {
+    case 'depart':
+      return `Head ${modifier ?? 'out'}${on}`;
+    case 'turn':
+      return `Turn ${modifier ?? 'ahead'}${onto}`;
+    case 'new name':
+      return `Continue${onto}`;
+    case 'merge':
+      return `Merge ${modifier ?? ''}`.trim() + onto;
+    case 'on ramp':
+      return `Take the ramp${onto}`;
+    case 'off ramp':
+      return `Take the exit${onto}`;
+    case 'fork':
+      return `Keep ${modifier ?? 'ahead'}${onto}`;
+    case 'roundabout':
+    case 'rotary':
+      return `Enter the roundabout${onto}`;
+    case 'continue':
+      return `Continue ${modifier ?? 'straight'}`.trim() + on;
+    case 'arrive':
+      return 'Arrive at your destination';
+    default:
+      return `Continue${onto}`;
+  }
+}
+
+/** Great-circle distance between two points, in meters. */
+function distanceMeters(a: Coordinate, b: Coordinate): number {
+  const R = 6371000;
+  const toRad = (x: number) => (x * Math.PI) / 180;
+  const dLat = toRad(b.latitude - a.latitude);
+  const dLon = toRad(b.longitude - a.longitude);
+  const lat1 = toRad(a.latitude);
+  const lat2 = toRad(b.latitude);
+  const h =
+    Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+function formatDistance(meters: number): string {
+  if (meters < 1000) return `${Math.round(meters)} m`;
+  return `${(meters / 1000).toFixed(1)} km`;
+}
+
+function formatDuration(seconds: number): string {
+  const mins = Math.max(1, Math.round(seconds / 60));
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m ? `${h} h ${m} min` : `${h} h`;
 }
 
 function buildMapHtml() {
@@ -450,6 +726,27 @@ function buildMapHtml() {
 
         map.fitBounds(routeLine.getBounds(), { padding: [48, 48] });
       };
+
+      // Remove the current route and its markers.
+      window.clearRoute = function () {
+        if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+        if (fromMarker) { map.removeLayer(fromMarker); fromMarker = null; }
+        if (toMarker) { map.removeLayer(toMarker); toMarker = null; }
+      };
+
+      // Drive mode: keep the map centered and zoomed on the moving user.
+      window.follow = function (lat, lng) {
+        var latlng = L.latLng(lat, lng);
+        if (userMarker) { userMarker.setLatLng(latlng); }
+        else { userMarker = L.circleMarker(latlng, { radius: 8, color: '#ffffff', weight: 3, fillColor: '#015144', fillOpacity: 1 }).addTo(map); }
+        if (userCircle) { map.removeLayer(userCircle); userCircle = null; }
+        map.setView(latlng, 17, { animate: true, duration: 0.5 });
+      };
+
+      // Leave drive mode and re-fit the whole route.
+      window.endDrive = function () {
+        if (routeLine) { map.fitBounds(routeLine.getBounds(), { padding: [48, 48] }); }
+      };
     </script>
   </body>
 </html>`;
@@ -533,6 +830,17 @@ const styles = StyleSheet.create({
     backgroundColor: HAIRLINE,
     marginLeft: 28,
   },
+  fromLocate: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 6,
+  },
+  fromLocatePressed: {
+    opacity: 0.6,
+  },
   goButton: {
     width: 36,
     height: 36,
@@ -582,6 +890,144 @@ const styles = StyleSheet.create({
     color: '#E5484D',
     paddingVertical: 6,
     paddingLeft: 28,
+  },
+  navBanner: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    backgroundColor: Brand.green,
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    shadowColor: '#000000',
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 12,
+  },
+  navManeuverIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+  },
+  navBannerBody: {
+    flex: 1,
+  },
+  navDistance: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: Brand.white,
+    letterSpacing: -0.4,
+  },
+  navInstruction: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.9)',
+    marginTop: 1,
+  },
+  routeCard: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: C.background,
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: HAIRLINE,
+    shadowColor: '#000000',
+    shadowOpacity: 0.14,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 10,
+  },
+  routeInfo: {
+    flex: 1,
+  },
+  routeEta: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: C.text,
+    letterSpacing: -0.4,
+  },
+  routeDistance: {
+    fontSize: 14,
+    color: C.textSecondary,
+    marginTop: 1,
+  },
+  startButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: 44,
+    paddingHorizontal: 20,
+    borderRadius: 22,
+    backgroundColor: Brand.green,
+  },
+  startLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Brand.white,
+  },
+  routeClose: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navFooter: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: C.background,
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: HAIRLINE,
+    shadowColor: '#000000',
+    shadowOpacity: 0.14,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 10,
+  },
+  navFooterInfo: {
+    flex: 1,
+  },
+  navEta: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: Brand.green,
+    letterSpacing: -0.4,
+  },
+  navRemaining: {
+    fontSize: 14,
+    color: C.textSecondary,
+    marginTop: 1,
+  },
+  endButton: {
+    height: 44,
+    paddingHorizontal: 22,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E5484D',
+  },
+  endLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Brand.white,
   },
   locateButton: {
     position: 'absolute',
