@@ -1,17 +1,11 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { Pressable } from '@/components/haptic-pressable';
 import { Brand, Colors, Spacing } from '@/constants/theme';
+import { useFloatingTabClearance } from '@/hooks/use-floating-tab-clearance';
 
 const C = Colors.light;
 
@@ -32,6 +26,7 @@ const CATEGORIES: Category[] = [
 ];
 
 export default function ReportScreen() {
+  const tabClearance = useFloatingTabClearance();
   const [selected, setSelected] = useState<string | null>(null);
   const [details, setDetails] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -129,7 +124,7 @@ export default function ReportScreen() {
           </View>
         </ScrollView>
 
-        <View style={styles.footer}>
+        <View style={[styles.footer, { paddingBottom: tabClearance }]}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Submit report"

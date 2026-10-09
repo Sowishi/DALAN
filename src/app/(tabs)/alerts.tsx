@@ -1,8 +1,10 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { Pressable } from '@/components/haptic-pressable';
 import { Brand, Colors, Spacing } from '@/constants/theme';
+import { useFloatingTabClearance } from '@/hooks/use-floating-tab-clearance';
 
 const C = Colors.light;
 
@@ -59,6 +61,7 @@ const ALERTS: Alert[] = [
 ];
 
 export default function AlertsScreen() {
+  const tabClearance = useFloatingTabClearance();
   const unreadCount = ALERTS.filter((a) => a.unread).length;
 
   return (
@@ -73,7 +76,9 @@ export default function AlertsScreen() {
           </Text>
         </View>
 
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={[styles.content, { paddingBottom: tabClearance }]}
+          showsVerticalScrollIndicator={false}>
           {ALERTS.map((a) => (
             <Pressable
               key={a.key}

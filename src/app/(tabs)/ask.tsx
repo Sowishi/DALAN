@@ -4,22 +4,25 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { Pressable } from '@/components/haptic-pressable';
 import { Brand, Colors, Spacing } from '@/constants/theme';
+import { useFloatingTabClearance } from '@/hooks/use-floating-tab-clearance';
 import { useLocalAssistant } from '@/hooks/use-local-assistant';
 
 const C = Colors.light;
 const MAX_MESSAGE = 400;
 
 export default function AskScreen() {
+  const tabClearance = useFloatingTabClearance();
   const { status, downloadProgress, loadProgress, error, messages, isGenerating, send, retry } =
     useLocalAssistant();
   const [draft, setDraft] = useState('');
@@ -92,7 +95,7 @@ export default function AskScreen() {
             </ScrollView>
           )}
 
-          <View style={styles.composer}>
+          <View style={[styles.composer, { paddingBottom: tabClearance }]}>
             <TextInput
               value={draft}
               onChangeText={setDraft}

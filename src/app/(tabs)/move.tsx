@@ -1,9 +1,11 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { Pressable } from '@/components/haptic-pressable';
 import { Brand, Colors, Spacing } from '@/constants/theme';
+import { useFloatingTabClearance } from '@/hooks/use-floating-tab-clearance';
 
 const C = Colors.light;
 
@@ -38,6 +40,7 @@ const WEEKLY = [
 ];
 
 export default function MoveScreen() {
+  const tabClearance = useFloatingTabClearance();
   const [mode, setMode] = useState('run');
   const [running, setRunning] = useState(false);
 
@@ -49,7 +52,9 @@ export default function MoveScreen() {
           <Text style={styles.headerSubtitle}>Track your journey, your way</Text>
         </View>
 
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={[styles.content, { paddingBottom: tabClearance }]}
+          showsVerticalScrollIndicator={false}>
           <View style={styles.modeRow}>
             {MODES.map((m) => {
               const selected = mode === m.key;

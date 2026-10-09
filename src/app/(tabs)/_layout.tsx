@@ -1,27 +1,13 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 
-import { Brand, Colors } from '@/constants/theme';
-
-// Dashboard renders on a light surface to match the DALAN product design.
-const C = Colors.light;
+import { FloatingTabBar } from '@/components/floating-tab-bar';
 
 export default function TabsLayout() {
   return (
     <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: Brand.green,
-        tabBarInactiveTintColor: C.textSecondary,
-        tabBarStyle: {
-          backgroundColor: C.background,
-          borderTopColor: C.backgroundSelected,
-        },
-        tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: '600',
-        },
-      }}>
+      tabBar={(props) => <FloatingTabBar {...props} />}
+      screenOptions={{ headerShown: false }}>
       <Tabs.Screen
         name="explore"
         options={{
