@@ -24,6 +24,12 @@ type LocationPickerProps = {
   onChange: (location: PinnedLocation) => void;
   onRecenter: () => void;
   onClose: () => void;
+  onConfirm?: () => void;
+  /** In-chat map panel instead of a full-screen modal. */
+  embedded?: boolean;
+  title?: string;
+  subtitle?: string;
+  confirmLabel?: string;
 };
 
 export function LocationPicker({
@@ -33,6 +39,11 @@ export function LocationPicker({
   onChange,
   onRecenter,
   onClose,
+  onConfirm,
+  embedded = false,
+  title = 'Pin location',
+  subtitle,
+  confirmLabel = 'Use this location',
 }: LocationPickerProps) {
   const insets = useSafeAreaInsets();
   const webViewRef = useRef<WebView>(null);
@@ -66,93 +77,112 @@ export function LocationPicker({
 
   const confirm = () => {
     pressHaptic();
-    onClose();
+    if (onConfirm) onConfirm();
+    else onClose();
   };
+
+  const mapBody = (
+    <>
+      <View style={[styles.header, !embedded && { paddingTop: insets.top + 8 }]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Cancel"
+          onPress={() => {
+            pressHaptic();
+            onClose();
+          }}
+          hitSlop={8}
+          style={({ pressed }) => [styles.headerButton, pressed && styles.pressed]}>
+          <Ionicons name="close" size={24} color={C.text} />
+        </Pressable>
+        <View style={styles.headerCopy}>
+          <Text numberOfLines={1} style={styles.headerTitle}>
+            {title}
+          </Text>
+          {subtitle ? (
+            <Text numberOfLines={1} style={styles.headerSubtitle}>
+              {subtitle}
+            </Text>
+          ) : null}
+        </View>
+        <View style={styles.headerButton} />
+      </View>
+
+      {Platform.OS === 'ios' || Platform.OS === 'android' ? (
+        <View style={styles.mapWrap}>
+          <WebView
+            ref={webViewRef}
+            style={styles.map}
+            originWhitelist={['*']}
+            source={{ html: PICKER_HTML }}
+            javaScriptEnabled
+            domStorageEnabled
+            androidLayerType="hardware"
+            onLoadEnd={() => {
+              mapReady.current = true;
+              if (location) {
+                webViewRef.current?.injectJavaScript(
+                  `window.setCenter(${location.latitude}, ${location.longitude}); true;`,
+                );
+              }
+            }}
+            onMessage={handleMessage}
+          />
+          <View pointerEvents="none" style={styles.pinOverlay}>
+            <Ionicons name="location" size={40} color="#E5484D" />
+          </View>
+          {location ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Use current location"
+              onPress={() => {
+                pressHaptic();
+                onRecenter();
+              }}
+              style={({ pressed }) => [styles.recenter, pressed && styles.pressed]}>
+              <Ionicons name="locate" size={22} color={Brand.green} />
+            </Pressable>
+          ) : null}
+        </View>
+      ) : (
+        <View style={styles.fallback}>
+          <Text style={styles.fallbackText}>
+            {location
+              ? `${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}`
+              : 'Location unavailable'}
+          </Text>
+        </View>
+      )}
+
+      <View style={[styles.footer, !embedded && { paddingBottom: Math.max(insets.bottom, 16) }]}>
+        <Text numberOfLines={2} style={styles.hint}>
+          {label}
+        </Text>
+        <Text style={styles.subhint}>Drag the map to place the pin on the exact spot</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={confirmLabel}
+          onPress={confirm}
+          disabled={!location}
+          style={({ pressed }) => [
+            styles.confirm,
+            !location && styles.confirmDisabled,
+            pressed && location && styles.pressed,
+          ]}>
+          <Text style={styles.confirmLabel}>{confirmLabel}</Text>
+        </Pressable>
+      </View>
+    </>
+  );
+
+  if (embedded) {
+    if (!visible) return null;
+    return <View style={styles.embedded}>{mapBody}</View>;
+  }
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
-      <View style={styles.screen}>
-        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Cancel"
-            onPress={() => {
-              pressHaptic();
-              onClose();
-            }}
-            hitSlop={8}
-            style={({ pressed }) => [styles.headerButton, pressed && styles.pressed]}>
-            <Ionicons name="close" size={24} color={C.text} />
-          </Pressable>
-          <Text style={styles.headerTitle}>Pin location</Text>
-          <View style={styles.headerButton} />
-        </View>
-
-        {Platform.OS === 'ios' || Platform.OS === 'android' ? (
-          <View style={styles.mapWrap}>
-            <WebView
-              ref={webViewRef}
-              style={styles.map}
-              originWhitelist={['*']}
-              source={{ html: PICKER_HTML }}
-              javaScriptEnabled
-              domStorageEnabled
-              androidLayerType="hardware"
-              onLoadEnd={() => {
-                mapReady.current = true;
-                if (location) {
-                  webViewRef.current?.injectJavaScript(
-                    `window.setCenter(${location.latitude}, ${location.longitude}); true;`,
-                  );
-                }
-              }}
-              onMessage={handleMessage}
-            />
-            <View pointerEvents="none" style={styles.pinOverlay}>
-              <Ionicons name="location" size={40} color="#E5484D" />
-            </View>
-            {location ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Use current location"
-                onPress={() => {
-                  pressHaptic();
-                  onRecenter();
-                }}
-                style={({ pressed }) => [styles.recenter, pressed && styles.pressed]}>
-                <Ionicons name="locate" size={22} color={Brand.green} />
-              </Pressable>
-            ) : null}
-          </View>
-        ) : (
-          <View style={styles.fallback}>
-            <Text style={styles.fallbackText}>
-              {location
-                ? `${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}`
-                : 'Location unavailable'}
-            </Text>
-          </View>
-        )}
-
-        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-          <Text numberOfLines={2} style={styles.hint}>
-            {label}
-          </Text>
-          <Text style={styles.subhint}>Drag the map to place the pin on the exact spot</Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Use this location"
-            onPress={confirm}
-            disabled={!location}
-            style={({ pressed }) => [
-              styles.confirm,
-              !location && styles.confirmDisabled,
-              pressed && location && styles.pressed,
-            ]}>
-            <Text style={styles.confirmLabel}>Use this location</Text>
-          </Pressable>
-        </View>
-      </View>
+      <View style={styles.screen}>{mapBody}</View>
     </Modal>
   );
 }
@@ -229,10 +259,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  embedded: {
+    flex: 1,
+    minHeight: 320,
+    backgroundColor: C.background,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    overflow: 'hidden',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderColor: HAIRLINE,
+  },
+  headerCopy: {
+    flex: 1,
+    alignItems: 'center',
+  },
   headerTitle: {
     fontSize: 17,
     fontWeight: '600',
     color: C.text,
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    color: C.textSecondary,
+    marginTop: 1,
   },
   mapWrap: {
     flex: 1,

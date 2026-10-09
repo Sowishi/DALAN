@@ -3,6 +3,19 @@ import { initLlama, type LlamaContext } from 'llama.rn';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ASSISTANT_GUIDE } from '@/constants/assistant-guide';
+import { HAZARD_META } from '@/constants/hazards';
+import {
+  detectHazardType,
+  extractDetails,
+  formatListReply,
+  isAffirmative,
+  isListIntent,
+  isNegative,
+  isReportIntent,
+  listReports,
+  submitReport,
+  type PendingReport,
+} from '@/services/dally-tools';
 import { isExpoGo } from '@/utils/is-expo-go';
 
 export type AssistantStatus = 'downloading' | 'loading' | 'ready' | 'error';
@@ -46,6 +59,8 @@ export function useLocalAssistant() {
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [pendingReport, setPendingReport] = useState<PendingReport | null>(null);
+  const pendingRef = useRef<PendingReport | null>(null);
 
   const releaseContext = useCallback(async () => {
     const ctx = contextRef.current;
@@ -156,18 +171,93 @@ export function useLocalAssistant() {
     };
   }, [prepare, releaseContext]);
 
+  const appendDally = useCallback((content: string) => {
+    setMessages((prev) => [...prev, { id: nextId('assistant'), role: 'assistant', content }]);
+  }, []);
+
+  const setPending = useCallback((next: PendingReport | null) => {
+    pendingRef.current = next;
+    setPendingReport(next);
+  }, []);
+
+  const cancelPending = useCallback(() => {
+    if (!pendingRef.current) return;
+    setPending(null);
+    appendDally('Okay, I cancelled that report.');
+  }, [appendDally, setPending]);
+
+  const confirmPin = useCallback(
+    async (location: { latitude: number; longitude: number }) => {
+      const pending = pendingRef.current;
+      if (!pending) return;
+
+      try {
+        await submitReport({
+          type: pending.type,
+          description: pending.description,
+          latitude: location.latitude,
+          longitude: location.longitude,
+        });
+        setPending(null);
+        appendDally(
+          `Posted. Your ${HAZARD_META[pending.type].label} report is on the Map now.`,
+        );
+      } catch {
+        appendDally('I could not save that report. Check your connection and try again.');
+      }
+    },
+    [appendDally, setPending],
+  );
+
   const send = useCallback(async (text: string) => {
     const trimmed = text.trim();
+    if (!trimmed || generatingRef.current) return;
+
+    const userMessage: ChatMessage = { id: nextId('user'), role: 'user', content: trimmed };
+    setMessages((prev) => [...prev, userMessage]);
+
+    const pending = pendingRef.current;
+    if (pending?.awaiting === 'confirm') {
+      if (isAffirmative(trimmed)) {
+        setPending({ ...pending, awaiting: 'location' });
+        appendDally('Pin the exact spot on the map, then tap Use this location.');
+        return;
+      }
+      if (isNegative(trimmed)) {
+        cancelPending();
+        return;
+      }
+    }
+
+    if (isReportIntent(trimmed)) {
+      const type = detectHazardType(trimmed) ?? 'other';
+      const description = extractDetails(trimmed, type);
+      setPending({ type, description, awaiting: 'location' });
+      const detail = description ? `: ${description}` : '';
+      appendDally(
+        `I can file a ${HAZARD_META[type].label} report${detail}. Pin the exact spot on the map, then tap Post report.`,
+      );
+      return;
+    }
+
+    if (isListIntent(trimmed)) {
+      try {
+        const { reports, summary } = await listReports();
+        appendDally(formatListReply(reports, summary));
+      } catch {
+        appendDally('I could not load live reports. Check your connection and try again.');
+      }
+      return;
+    }
+
     const context = contextRef.current;
-    if (!trimmed || !context || generatingRef.current) return;
+    if (!context) return;
 
     generatingRef.current = true;
     setIsGenerating(true);
 
-    const userMessage: ChatMessage = { id: nextId('user'), role: 'user', content: trimmed };
     const assistantMessage: ChatMessage = { id: nextId('assistant'), role: 'assistant', content: '' };
-
-    setMessages((prev) => [...prev, userMessage, assistantMessage]);
+    setMessages((prev) => [...prev, assistantMessage]);
 
     const history = [...messages, userMessage].slice(-HISTORY_MESSAGES).map((item) => ({
       role: item.role,
@@ -175,10 +265,20 @@ export function useLocalAssistant() {
     }));
 
     try {
+      let liveReports = 'No live reports right now.';
+      try {
+        liveReports = (await listReports()).summary;
+      } catch {
+        // Keep chatting even if Firestore is unreachable.
+      }
+
       await context.clearCache();
       const result = await context.completion(
         {
-          messages: [{ role: 'system', content: ASSISTANT_GUIDE }, ...history],
+          messages: [
+            { role: 'system', content: `${ASSISTANT_GUIDE}\nLive reports:\n${liveReports}` },
+            ...history,
+          ],
           n_predict: N_PREDICT,
           temperature: 0.7,
           stop: STOP_WORDS,
@@ -226,7 +326,7 @@ export function useLocalAssistant() {
       generatingRef.current = false;
       setIsGenerating(false);
     }
-  }, [messages]);
+  }, [appendDally, cancelPending, messages, setPending]);
 
   return {
     status,
@@ -235,7 +335,10 @@ export function useLocalAssistant() {
     error,
     messages,
     isGenerating,
+    pendingReport,
     send,
+    confirmPin,
+    cancelPending,
     retry: prepare,
   };
 }

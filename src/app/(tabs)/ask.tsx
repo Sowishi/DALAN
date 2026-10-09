@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRef, useState } from 'react';
+import * as Location from 'expo-location';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
+  Keyboard,
   Platform,
   ScrollView,
   StyleSheet,
@@ -14,6 +15,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Pressable } from '@/components/haptic-pressable';
+import { LocationPicker, type PinnedLocation } from '@/components/location-picker';
+import { HAZARD_META } from '@/constants/hazards';
 import { Brand, Colors, Spacing } from '@/constants/theme';
 import { useFloatingTabClearance } from '@/hooks/use-floating-tab-clearance';
 import { useLocalAssistant } from '@/hooks/use-local-assistant';
@@ -23,10 +26,58 @@ const MAX_MESSAGE = 400;
 
 export default function AskScreen() {
   const tabClearance = useFloatingTabClearance();
-  const { status, downloadProgress, loadProgress, error, messages, isGenerating, send, retry } =
-    useLocalAssistant();
+  const {
+    status,
+    downloadProgress,
+    loadProgress,
+    error,
+    messages,
+    isGenerating,
+    pendingReport,
+    send,
+    confirmPin,
+    cancelPending,
+    retry,
+  } = useLocalAssistant();
   const [draft, setDraft] = useState('');
+  const [pin, setPin] = useState<PinnedLocation | null>(null);
+  const [focusNonce, setFocusNonce] = useState(0);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
+  const pickerOpen = pendingReport?.awaiting === 'location';
+
+  useEffect(() => {
+    const show = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (event) => setKeyboardHeight(event.endCoordinates.height),
+    );
+    const hide = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setKeyboardHeight(0),
+    );
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+
+  const keyboardOpen = keyboardHeight > 0;
+  const composerBottom = keyboardOpen ? keyboardHeight + Spacing.two : tabClearance;
+
+  const locateOnGps = async () => {
+    const { status: permission } = await Location.requestForegroundPermissionsAsync();
+    if (permission !== Location.PermissionStatus.GRANTED) return;
+    const fix = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.BestForNavigation,
+    });
+    setPin({ latitude: fix.coords.latitude, longitude: fix.coords.longitude });
+    setFocusNonce((n) => n + 1);
+  };
+
+  useEffect(() => {
+    if (!pickerOpen) return;
+    void locateOnGps();
+  }, [pickerOpen]);
 
   const ready = status === 'ready';
   const canSend = ready && !isGenerating && draft.trim().length > 0;
@@ -40,13 +91,10 @@ export default function AskScreen() {
 
   return (
     <View style={styles.container}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <SafeAreaView edges={['top']} style={styles.flex}>
+      <SafeAreaView edges={['top']} style={styles.flex}>
           <View style={styles.header}>
-            <Text style={styles.headerTitle}>Ask</Text>
-            <Text style={styles.headerSubtitle}>Talk about DALAN on this phone</Text>
+            <Text style={styles.headerTitle}>Dally</Text>
+            <Text style={styles.headerSubtitle}>Your helper for road hindrances</Text>
           </View>
 
           {status === 'downloading' || status === 'loading' ? (
@@ -64,15 +112,16 @@ export default function AskScreen() {
           ) : (
             <ScrollView
               ref={scrollRef}
-              style={styles.flex}
+              style={pickerOpen ? styles.threadShrink : styles.flex}
               contentContainerStyle={styles.thread}
               keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="interactive"
               onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}>
               {messages.length === 0 ? (
                 <View style={styles.empty}>
-                  <Text style={styles.emptyTitle}>Ask about this app</Text>
+                  <Text style={styles.emptyTitle}>Hi, I&apos;m Dally</Text>
                   <Text style={styles.emptyBody}>
-                    Try “How do I report a flood?” or “What does Explore show?”
+                    Try “Any flooding nearby?” or “Report debris on the sidewalk.”
                   </Text>
                 </View>
               ) : (
@@ -95,11 +144,34 @@ export default function AskScreen() {
             </ScrollView>
           )}
 
-          <View style={[styles.composer, { paddingBottom: tabClearance }]}>
+          {pickerOpen && pendingReport ? (
+            <View style={{ flex: 1, paddingBottom: tabClearance }}>
+              <LocationPicker
+                embedded
+                visible
+                location={pin}
+                focusNonce={focusNonce}
+                title={`File ${HAZARD_META[pendingReport.type].label}`}
+                subtitle={pendingReport.description || 'Pin the exact spot'}
+                confirmLabel="Post report"
+                onChange={setPin}
+                onRecenter={() => {
+                  void locateOnGps();
+                }}
+                onClose={cancelPending}
+                onConfirm={() => {
+                  if (pin) void confirmPin(pin);
+                }}
+              />
+            </View>
+          ) : null}
+
+          {pickerOpen ? null : (
+          <View style={[styles.composer, { paddingBottom: composerBottom }]}>
             <TextInput
               value={draft}
               onChangeText={setDraft}
-              placeholder={ready ? 'Ask about DALAN…' : 'Model is not ready yet'}
+              placeholder={ready ? 'Ask Dally…' : 'Dally is not ready yet'}
               placeholderTextColor={C.textSecondary}
               editable={ready && !isGenerating}
               multiline
@@ -108,6 +180,11 @@ export default function AskScreen() {
               onSubmitEditing={handleSend}
               blurOnSubmit
               accessibilityLabel="Message"
+              onFocus={() => {
+                requestAnimationFrame(() => {
+                  scrollRef.current?.scrollToEnd({ animated: true });
+                });
+              }}
               style={styles.input}
             />
             <Pressable
@@ -128,8 +205,8 @@ export default function AskScreen() {
               )}
             </Pressable>
           </View>
-        </SafeAreaView>
-      </KeyboardAvoidingView>
+          )}
+      </SafeAreaView>
     </View>
   );
 }
@@ -185,6 +262,11 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 32, fontWeight: '700', color: C.text, letterSpacing: -0.5 },
   headerSubtitle: { fontSize: 15, color: C.textSecondary },
+  threadShrink: {
+    flexGrow: 0,
+    flexShrink: 1,
+    maxHeight: 180,
+  },
   thread: {
     flexGrow: 1,
     paddingHorizontal: Spacing.three,

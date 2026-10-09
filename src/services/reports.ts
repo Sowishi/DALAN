@@ -1,6 +1,8 @@
 import {
   addDoc,
   collection,
+  getDocs,
+  limit,
   onSnapshot,
   orderBy,
   query,
@@ -46,6 +48,15 @@ export async function addReport(report: NewReport): Promise<string> {
     createdAt: serverTimestamp(),
   });
   return ref.id;
+}
+
+/** One-shot read of the newest reports. */
+export async function getReports(): Promise<Hazard[]> {
+  const reportsQuery = query(collection(db, 'reports'), orderBy('createdAt', 'desc'), limit(20));
+  const snapshot = await getDocs(reportsQuery);
+  return snapshot.docs
+    .map((doc) => asHazard(doc.id, doc.data()))
+    .filter((report): report is Hazard => report !== null);
 }
 
 /** Subscribes to live reports, newest first. */
