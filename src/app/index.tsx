@@ -1,62 +1,161 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
+import { useState } from 'react';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+} from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { Fonts, MaxContentWidth, Motion, Radius, Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+function PrimaryButton({
+  label,
+  onPress,
+  disabled,
+}: {
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
+  const theme = useTheme();
+  const scale = useSharedValue(1);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.get() }],
+  }));
+
   return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
+    <AnimatedPressable
+      accessibilityRole="button"
+      disabled={disabled}
+      onPressIn={() => {
+        scale.set(withSpring(0.97, Motion.spring));
+      }}
+      onPressOut={() => {
+        scale.set(withSpring(1, Motion.spring));
+      }}
+      onPress={onPress}
+      style={[
+        styles.primaryButton,
+        { backgroundColor: theme.text, opacity: disabled ? 0.5 : 1 },
+        animatedStyle,
+      ]}>
+      <ThemedText style={[styles.primaryButtonLabel, { color: theme.background }]}>
+        {label}
+      </ThemedText>
+    </AnimatedPressable>
   );
 }
 
-export default function HomeScreen() {
+export default function LoginScreen() {
+  const theme = useTheme();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
+  const canSubmit = email.trim().length > 0 && password.length > 0;
+
+  const handleLogin = () => {
+    // TODO: wire up real authentication and navigate to the main app.
+  };
+
   return (
     <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <SafeAreaView style={styles.flex}>
+          <ScrollView
+            contentContainerStyle={styles.content}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}>
+            <ThemedView style={styles.header}>
+              <ThemedText type="title" style={styles.brand}>
+                DALAN
+              </ThemedText>
+              <ThemedText themeColor="textSecondary" style={styles.subtitle}>
+                Sign in to continue
+              </ThemedText>
+            </ThemedView>
 
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
+            <ThemedView style={styles.form}>
+              <ThemedView style={styles.field}>
+                <ThemedText type="smallBold" themeColor="textSecondary">
+                  Email
+                </ThemedText>
+                <TextInput
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="you@example.com"
+                  placeholderTextColor={theme.textSecondary}
+                  autoCapitalize="none"
+                  autoComplete="email"
+                  keyboardType="email-address"
+                  inputMode="email"
+                  returnKeyType="next"
+                  style={[
+                    styles.input,
+                    { backgroundColor: theme.backgroundElement, color: theme.text },
+                  ]}
+                />
+              </ThemedView>
 
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
+              <ThemedView style={styles.field}>
+                <ThemedText type="smallBold" themeColor="textSecondary">
+                  Password
+                </ThemedText>
+                <TextInput
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="••••••••"
+                  placeholderTextColor={theme.textSecondary}
+                  autoCapitalize="none"
+                  autoComplete="password"
+                  secureTextEntry
+                  returnKeyType="done"
+                  onSubmitEditing={canSubmit ? handleLogin : undefined}
+                  style={[
+                    styles.input,
+                    { backgroundColor: theme.backgroundElement, color: theme.text },
+                  ]}
+                />
+              </ThemedView>
 
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {}}
+                style={styles.forgotRow}>
+                <ThemedText type="small" themeColor="textSecondary">
+                  Forgot password?
+                </ThemedText>
+              </Pressable>
+
+              <PrimaryButton label="Sign In" onPress={handleLogin} disabled={!canSubmit} />
+            </ThemedView>
+
+            <ThemedView style={styles.footer}>
+              <ThemedText type="small" themeColor="textSecondary">
+                Don&apos;t have an account?{' '}
+              </ThemedText>
+              <Pressable accessibilityRole="button" onPress={() => {}}>
+                <ThemedText type="smallBold">Sign up</ThemedText>
+              </Pressable>
+            </ThemedView>
+          </ScrollView>
+        </SafeAreaView>
+      </KeyboardAvoidingView>
     </ThemedView>
   );
 }
@@ -64,35 +163,61 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
   },
-  safeArea: {
+  flex: {
     flex: 1,
-    paddingHorizontal: Spacing.four,
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
+  },
+  content: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignSelf: 'center',
+    width: '100%',
     maxWidth: MaxContentWidth,
-  },
-  heroSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
     paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
+    paddingVertical: Spacing.five,
+    gap: Spacing.five,
   },
-  title: {
+  header: {
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  brand: {
+    letterSpacing: 2,
+  },
+  subtitle: {
     textAlign: 'center',
   },
-  code: {
-    textTransform: 'uppercase',
-  },
-  stepContainer: {
+  form: {
     gap: Spacing.three,
-    alignSelf: 'stretch',
+  },
+  field: {
+    gap: Spacing.one,
+  },
+  input: {
+    height: 52,
+    borderRadius: Radius.md,
     paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
+    fontSize: 16,
+    fontFamily: Fonts.sans,
+  },
+  forgotRow: {
+    alignSelf: 'flex-end',
+    paddingVertical: Spacing.one,
+  },
+  primaryButton: {
+    height: 52,
+    borderRadius: Radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: Spacing.two,
+  },
+  primaryButtonLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
