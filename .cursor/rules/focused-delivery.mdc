@@ -1,0 +1,26 @@
+---
+description: Finish the requested task quickly; skip full-project verification unless asked
+alwaysApply: true
+---
+
+# Focused delivery
+
+Do what the user asked for and stop. Do not expand scope or run long verification passes by default.
+
+## Default behavior
+
+- Implement only the change described in the request.
+- Do not run `expo lint`, `tsc --noEmit`, `expo-doctor`, or full test suites before marking the task done unless the user explicitly asks for checks, CI, or a “make sure it passes” review.
+- Prefer quick, targeted feedback: read lints for files you edited when the editor reports issues, or a single focused command if one file clearly needs it.
+
+## When to run broader checks
+
+Run lint, typecheck, or doctor only when:
+
+- The user asks (e.g. “lint this”, “fix CI”, “run typecheck”).
+- The task is explicitly about fixing build, lint, or type errors project-wide.
+- You changed types, exports, or shared modules in a way that obviously affects many files.
+
+## Definition of done (normal tasks)
+
+The task is done when the requested behavior or edit is in place and you have not left obvious mistakes in the files you touched. Summarize what changed briefly. Do not block on a clean full-repo lint or typecheck run.
