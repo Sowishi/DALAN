@@ -1,16 +1,20 @@
 import { StyleSheet, View } from 'react-native';
 
-import { Colors } from '@/constants/theme';
-
-const C = Colors.light;
+import { CityMap } from '@/components/city-map';
 
 export default function ExploreScreen() {
-  return <View style={styles.container} />;
+  return (
+    <View style={styles.container}>
+      <CityMap style={styles.map} />
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: C.background,
+  },
+  map: {
+    ...StyleSheet.absoluteFillObject,
   },
 });
