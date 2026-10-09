@@ -7,58 +7,13 @@ import {
   StyleSheet,
   TextInput,
 } from 'react-native';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AnimatedIcon } from '@/components/animated-icon';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Fonts, MaxContentWidth, Motion, Radius, Spacing } from '@/constants/theme';
+import { Fonts, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
-function PrimaryButton({
-  label,
-  onPress,
-  disabled,
-}: {
-  label: string;
-  onPress: () => void;
-  disabled?: boolean;
-}) {
-  const theme = useTheme();
-  const scale = useSharedValue(1);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.get() }],
-  }));
-
-  return (
-    <AnimatedPressable
-      accessibilityRole="button"
-      disabled={disabled}
-      onPressIn={() => {
-        scale.set(withSpring(0.97, Motion.spring));
-      }}
-      onPressOut={() => {
-        scale.set(withSpring(1, Motion.spring));
-      }}
-      onPress={onPress}
-      style={[
-        styles.primaryButton,
-        { backgroundColor: theme.text, opacity: disabled ? 0.5 : 1 },
-        animatedStyle,
-      ]}>
-      <ThemedText style={[styles.primaryButtonLabel, { color: theme.background }]}>
-        {label}
-      </ThemedText>
-    </AnimatedPressable>
-  );
-}
 
 export default function LoginScreen() {
   const theme = useTheme();
@@ -76,25 +31,25 @@ export default function LoginScreen() {
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <SafeAreaView style={styles.flex}>
+        <SafeAreaView style={styles.safeArea}>
           <ScrollView
-            contentContainerStyle={styles.content}
+            contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}>
-            <ThemedView style={styles.header}>
-              <ThemedText type="title" style={styles.brand}>
+            <ThemedView style={styles.heroSection}>
+              <AnimatedIcon />
+              <ThemedText type="title" style={styles.title}>
                 DALAN
-              </ThemedText>
-              <ThemedText themeColor="textSecondary" style={styles.subtitle}>
-                Sign in to continue
               </ThemedText>
             </ThemedView>
 
-            <ThemedView style={styles.form}>
+            <ThemedText type="code" style={styles.code}>
+              sign in
+            </ThemedText>
+
+            <ThemedView type="backgroundElement" style={styles.formContainer}>
               <ThemedView style={styles.field}>
-                <ThemedText type="smallBold" themeColor="textSecondary">
-                  Email
-                </ThemedText>
+                <ThemedText type="smallBold">Email</ThemedText>
                 <TextInput
                   value={email}
                   onChangeText={setEmail}
@@ -107,15 +62,17 @@ export default function LoginScreen() {
                   returnKeyType="next"
                   style={[
                     styles.input,
-                    { backgroundColor: theme.backgroundElement, color: theme.text },
+                    {
+                      backgroundColor: theme.background,
+                      color: theme.text,
+                      borderColor: theme.backgroundSelected,
+                    },
                   ]}
                 />
               </ThemedView>
 
               <ThemedView style={styles.field}>
-                <ThemedText type="smallBold" themeColor="textSecondary">
-                  Password
-                </ThemedText>
+                <ThemedText type="smallBold">Password</ThemedText>
                 <TextInput
                   value={password}
                   onChangeText={setPassword}
@@ -128,21 +85,31 @@ export default function LoginScreen() {
                   onSubmitEditing={canSubmit ? handleLogin : undefined}
                   style={[
                     styles.input,
-                    { backgroundColor: theme.backgroundElement, color: theme.text },
+                    {
+                      backgroundColor: theme.background,
+                      color: theme.text,
+                      borderColor: theme.backgroundSelected,
+                    },
                   ]}
                 />
               </ThemedView>
 
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => {}}
-                style={styles.forgotRow}>
-                <ThemedText type="small" themeColor="textSecondary">
-                  Forgot password?
-                </ThemedText>
+              <Pressable accessibilityRole="button" onPress={() => {}} style={styles.forgotRow}>
+                <ThemedText type="linkPrimary">Forgot password?</ThemedText>
               </Pressable>
 
-              <PrimaryButton label="Sign In" onPress={handleLogin} disabled={!canSubmit} />
+              <Pressable
+                accessibilityRole="button"
+                disabled={!canSubmit}
+                onPress={handleLogin}
+                style={({ pressed }) => [
+                  styles.primaryButton,
+                  { opacity: !canSubmit ? 0.5 : pressed ? 0.85 : 1 },
+                ]}>
+                <ThemedText type="smallBold" style={styles.primaryButtonLabel}>
+                  Sign In
+                </ThemedText>
+              </Pressable>
             </ThemedView>
 
             <ThemedView style={styles.footer}>
@@ -150,7 +117,7 @@ export default function LoginScreen() {
                 Don&apos;t have an account?{' '}
               </ThemedText>
               <Pressable accessibilityRole="button" onPress={() => {}}>
-                <ThemedText type="smallBold">Sign up</ThemedText>
+                <ThemedText type="linkPrimary">Sign up</ThemedText>
               </Pressable>
             </ThemedView>
           </ScrollView>
@@ -163,61 +130,76 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    justifyContent: 'center',
+    flexDirection: 'row',
   },
   flex: {
     flex: 1,
   },
-  content: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    alignSelf: 'center',
-    width: '100%',
-    maxWidth: MaxContentWidth,
+  safeArea: {
+    flex: 1,
     paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.five,
-    gap: Spacing.five,
-  },
-  header: {
     alignItems: 'center',
-    gap: Spacing.two,
+    gap: Spacing.three,
+    maxWidth: MaxContentWidth,
   },
-  brand: {
-    letterSpacing: 2,
+  scrollContent: {
+    flexGrow: 1,
+    alignSelf: 'stretch',
+    gap: Spacing.three,
+    paddingVertical: Spacing.four,
   },
-  subtitle: {
+  heroSection: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+    paddingHorizontal: Spacing.four,
+    gap: Spacing.four,
+    minHeight: 200,
+  },
+  title: {
     textAlign: 'center',
   },
-  form: {
+  code: {
+    textTransform: 'uppercase',
+    alignSelf: 'center',
+  },
+  formContainer: {
     gap: Spacing.three,
+    alignSelf: 'stretch',
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.four,
+    borderRadius: Spacing.four,
   },
   field: {
     gap: Spacing.one,
   },
   input: {
-    height: 52,
-    borderRadius: Radius.md,
+    height: 48,
+    borderRadius: Spacing.two,
     paddingHorizontal: Spacing.three,
     fontSize: 16,
     fontFamily: Fonts.sans,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   forgotRow: {
     alignSelf: 'flex-end',
-    paddingVertical: Spacing.one,
   },
   primaryButton: {
-    height: 52,
-    borderRadius: Radius.md,
+    height: 48,
+    borderRadius: Spacing.two,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: Spacing.two,
+    marginTop: Spacing.one,
+    backgroundColor: '#3c87f7',
   },
   primaryButtonLabel: {
-    fontSize: 16,
-    fontWeight: '600',
+    color: '#ffffff',
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
+    paddingBottom: Spacing.three,
   },
 });
