@@ -1,6 +1,9 @@
-import Constants from 'expo-constants';
+import Constants, { AppOwnership } from 'expo-constants';
 
-/** True only in the Expo Go app — not in dev or production builds. */
+/**
+ * True only inside the Expo Go app.
+ * `expoGoConfig` is also set for an embedded app.config in a development build, so it cannot be used here.
+ */
 export function isExpoGo(): boolean {
-  return Constants.expoGoConfig != null;
+  return Constants.appOwnership === AppOwnership.Expo;
 }

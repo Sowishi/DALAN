@@ -1,4 +1,5 @@
-import { Platform, StyleProp, ViewStyle } from 'react-native';
+import { useEffect, useState } from 'react';
+import { PermissionsAndroid, Platform, StyleProp, ViewStyle } from 'react-native';
 
 import { isExpoGo } from '@/utils/is-expo-go';
 
@@ -10,9 +11,15 @@ const CAMERA = {
 };
 
 export function CityMap({ style }: { style?: StyleProp<ViewStyle> }) {
-  if (isExpoGo()) {
+  if (isExpoGo() || (Platform.OS !== 'ios' && Platform.OS !== 'android')) {
     return <MapPlaceholder style={style} />;
   }
+
+  return <NativeCityMap style={style} />;
+}
+
+function NativeCityMap({ style }: { style?: StyleProp<ViewStyle> }) {
+  const myLocationEnabled = useMyLocationEnabled();
 
   // Lazy require so Expo Go never loads the native module.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -23,20 +30,46 @@ export function CityMap({ style }: { style?: StyleProp<ViewStyle> }) {
       <AppleMaps.View
         style={style}
         cameraPosition={CAMERA}
-        properties={{ isMyLocationEnabled: true }}
+        properties={{ isMyLocationEnabled: myLocationEnabled }}
       />
     );
   }
 
-  if (Platform.OS === 'android') {
-    return (
-      <GoogleMaps.View
-        style={style}
-        cameraPosition={CAMERA}
-        properties={{ isMyLocationEnabled: true }}
-      />
-    );
-  }
+  return (
+    <GoogleMaps.View
+      style={style}
+      cameraPosition={CAMERA}
+      properties={{ isMyLocationEnabled: myLocationEnabled }}
+    />
+  );
+}
 
-  return <MapPlaceholder style={style} />;
+function useMyLocationEnabled() {
+  const [enabled, setEnabled] = useState(false);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') {
+      setEnabled(true);
+      return;
+    }
+
+    let active = true;
+
+    const enableIfGranted = async () => {
+      const permission = PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION;
+      const alreadyGranted = await PermissionsAndroid.check(permission);
+      const granted =
+        alreadyGranted ||
+        (await PermissionsAndroid.request(permission)) === PermissionsAndroid.RESULTS.GRANTED;
+      if (active) setEnabled(granted);
+    };
+
+    void enableIfGranted();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return enabled;
 }

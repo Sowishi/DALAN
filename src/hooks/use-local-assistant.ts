@@ -38,6 +38,7 @@ export function useLocalAssistant() {
   const cancelledRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   const generatingRef = useRef(false);
+  const prepareIdRef = useRef(0);
 
   const [status, setStatus] = useState<AssistantStatus>('downloading');
   const [downloadProgress, setDownloadProgress] = useState(0);
@@ -55,9 +56,13 @@ export function useLocalAssistant() {
   }, []);
 
   const prepare = useCallback(async () => {
+    const prepareId = ++prepareIdRef.current;
+    const isStale = () => prepareId !== prepareIdRef.current || cancelledRef.current;
+
     cancelledRef.current = false;
     abortRef.current?.abort();
     await releaseContext();
+    if (isStale()) return;
 
     if (isExpoGo()) {
       setStatus('error');
@@ -94,7 +99,7 @@ export function useLocalAssistant() {
         });
 
         const downloaded = await task.downloadAsync();
-        if (cancelledRef.current) return;
+        if (isStale()) return;
         if (!downloaded || !downloaded.exists || downloaded.size < MIN_MODEL_BYTES) {
           throw new Error('The model download did not finish. Check Wi-Fi and try again.');
         }
@@ -103,7 +108,7 @@ export function useLocalAssistant() {
         setDownloadProgress(1);
       }
 
-      if (cancelledRef.current) return;
+      if (isStale()) return;
 
       setStatus('loading');
       const context = await initLlama(
@@ -120,7 +125,7 @@ export function useLocalAssistant() {
         },
       );
 
-      if (cancelledRef.current) {
+      if (isStale()) {
         await context.release().catch(() => undefined);
         return;
       }
@@ -129,9 +134,9 @@ export function useLocalAssistant() {
       setLoadProgress(1);
       setStatus('ready');
     } catch (err) {
-      if (cancelledRef.current) return;
+      if (isStale()) return;
       const message = err instanceof Error ? err.message : 'Could not prepare the local model.';
-      if (message.includes('AbortError') || message.toLowerCase().includes('abort')) {
+      if (err instanceof Error && (err.name === 'AbortError' || /abort|cancel/i.test(message))) {
         return;
       }
       setError(message);
@@ -144,6 +149,7 @@ export function useLocalAssistant() {
     void prepare();
 
     return () => {
+      prepareIdRef.current += 1;
       cancelledRef.current = true;
       abortRef.current?.abort();
       void releaseContext();
