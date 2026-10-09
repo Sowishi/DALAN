@@ -48,6 +48,12 @@
         }
       ],
       [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow DALAN to use your precise location to show you on the map."
+        }
+      ],
+      [
         "llama.rn",
         {
           "enableEntitlements": true,

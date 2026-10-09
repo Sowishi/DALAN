@@ -1,14 +1,29 @@
-import { useEffect, useState } from 'react';
-import { PermissionsAndroid, Platform, StyleProp, ViewStyle } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Platform, Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { WebView } from 'react-native-webview';
+
+import { Ionicons } from '@expo/vector-icons';
+import * as Location from 'expo-location';
+
+import { Brand, Colors } from '@/constants/theme';
+import { useFloatingTabClearance } from '@/hooks/use-floating-tab-clearance';
+import { pressHaptic } from '@/utils/haptics';
 
 import { MapPlaceholder } from './map-placeholder';
 
-// Camera centered on the Philippines.
+const C = Colors.light;
+
+// Camera centered on the Philippines until a precise fix arrives.
 const CAMERA = {
   latitude: 12.8797,
   longitude: 121.774,
   zoom: 5,
+};
+
+type PreciseLocation = {
+  latitude: number;
+  longitude: number;
+  accuracy: number;
 };
 
 export function CityMap({ style }: { style?: StyleProp<ViewStyle> }) {
@@ -21,24 +36,65 @@ export function CityMap({ style }: { style?: StyleProp<ViewStyle> }) {
 }
 
 function OpenStreetMap({ style }: { style?: StyleProp<ViewStyle> }) {
-  const locationEnabled = useLocationPermission();
+  const location = usePreciseLocation();
+  const clearance = useFloatingTabClearance();
+  const webViewRef = useRef<WebView>(null);
+  const mapReady = useRef(false);
+
+  const placeMarker = useCallback((fix: PreciseLocation) => {
+    const script = `window.setUserLocation(${fix.latitude}, ${fix.longitude}, ${fix.accuracy}); true;`;
+    webViewRef.current?.injectJavaScript(script);
+  }, []);
+
+  // Drop the marker once both the map and a precise fix are ready.
+  useEffect(() => {
+    if (location && mapReady.current) {
+      placeMarker(location);
+    }
+  }, [location, placeMarker]);
+
+  const recenterOnUser = () => {
+    pressHaptic();
+    if (location) {
+      placeMarker(location);
+    }
+  };
 
   return (
-    <WebView
-      style={style}
-      originWhitelist={['*']}
-      source={{ html: buildMapHtml(locationEnabled) }}
-      // Let Leaflet's locate control use the device location.
-      geolocationEnabled
-      javaScriptEnabled
-      domStorageEnabled
-      startInLoadingState
-      androidLayerType="hardware"
-    />
+    <View style={[styles.container, style]}>
+      <WebView
+        ref={webViewRef}
+        style={styles.webview}
+        originWhitelist={['*']}
+        source={{ html: buildMapHtml() }}
+        javaScriptEnabled
+        domStorageEnabled
+        startInLoadingState
+        androidLayerType="hardware"
+        onLoadEnd={() => {
+          mapReady.current = true;
+          if (location) placeMarker(location);
+        }}
+      />
+
+      {location ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Center on my location"
+          onPress={recenterOnUser}
+          style={({ pressed }) => [
+            styles.locateButton,
+            { bottom: clearance + 16 },
+            pressed && styles.locateButtonPressed,
+          ]}>
+          <Ionicons name="locate" size={22} color={Brand.green} />
+        </Pressable>
+      ) : null}
+    </View>
   );
 }
 
-function buildMapHtml(showLocation: boolean) {
+function buildMapHtml() {
   return `<!DOCTYPE html>
 <html>
   <head>
@@ -61,46 +117,86 @@ function buildMapHtml(showLocation: boolean) {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
       }).addTo(map);
 
-      ${
-        showLocation
-          ? `map.locate({ setView: true, maxZoom: 14 });
-      map.on('locationfound', function (e) {
-        L.marker(e.latlng).addTo(map);
-        L.circle(e.latlng, { radius: e.accuracy, color: '#015144', weight: 1, fillOpacity: 0.1 }).addTo(map);
-      });`
-          : ''
-      }
+      var userMarker = null;
+      var userCircle = null;
+
+      // Called from React Native with the device's precise GPS fix.
+      window.setUserLocation = function (lat, lng, accuracy) {
+        var latlng = L.latLng(lat, lng);
+
+        if (userMarker) { userMarker.setLatLng(latlng); }
+        else { userMarker = L.marker(latlng).addTo(map); }
+
+        if (userCircle) { userCircle.setLatLng(latlng).setRadius(accuracy); }
+        else { userCircle = L.circle(latlng, { radius: accuracy, color: '#015144', weight: 1, fillOpacity: 0.12 }).addTo(map); }
+
+        map.setView(latlng, 16);
+      };
     </script>
   </body>
 </html>`;
 }
 
-function useLocationPermission() {
-  const [enabled, setEnabled] = useState(false);
+/** Requests the precise (foreground) location and returns the current GPS fix. */
+function usePreciseLocation() {
+  const [location, setLocation] = useState<PreciseLocation | null>(null);
 
   useEffect(() => {
-    if (Platform.OS !== 'android') {
-      setEnabled(true);
-      return;
-    }
-
     let active = true;
 
-    const requestPermission = async () => {
-      const permission = PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION;
-      const alreadyGranted = await PermissionsAndroid.check(permission);
-      const granted =
-        alreadyGranted ||
-        (await PermissionsAndroid.request(permission)) === PermissionsAndroid.RESULTS.GRANTED;
-      if (active) setEnabled(granted);
+    const getPreciseFix = async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== Location.PermissionStatus.GRANTED || !active) return;
+
+      const fix = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.BestForNavigation,
+      });
+
+      if (!active) return;
+
+      setLocation({
+        latitude: fix.coords.latitude,
+        longitude: fix.coords.longitude,
+        accuracy: fix.coords.accuracy ?? 0,
+      });
     };
 
-    void requestPermission();
+    void getPreciseFix();
 
     return () => {
       active = false;
     };
   }, []);
 
-  return enabled;
+  return location;
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  webview: {
+    flex: 1,
+  },
+  locateButton: {
+    position: 'absolute',
+    right: 16,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: C.background,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0, 0, 0, 0.06)',
+    shadowColor: '#000000',
+    shadowOpacity: 0.14,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 8,
+  },
+  locateButtonPressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.96 }],
+  },
+});
