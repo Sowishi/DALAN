@@ -1,3 +1,4 @@
+import { AntDesign } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { Redirect, router } from 'expo-router';
 import { useState } from 'react';
@@ -54,12 +55,12 @@ type EmailAuthScreenProps = {
 };
 
 export function EmailAuthScreen({ mode }: EmailAuthScreenProps) {
-  const { user, ready, signIn, signUp, continueAsGuest } = useAuth();
+  const { user, ready, signIn, signUp, signInWithGoogle } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<'email' | 'google' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const isSignup = mode === 'signup';
 
@@ -77,29 +78,29 @@ export function EmailAuthScreen({ mode }: EmailAuthScreenProps) {
   };
 
   const submit = async () => {
-    if (busy) return;
+    if (pending) return;
     const nextError = validate();
     if (nextError) {
       setError(nextError);
       return;
     }
 
-    setBusy(true);
+    setPending('email');
     setError(null);
     const message = isSignup
       ? await signUp(name, email, password)
       : await signIn(email, password);
     if (message) setError(message);
-    setBusy(false);
+    setPending(null);
   };
 
-  const onGuest = async () => {
-    if (busy) return;
-    setBusy(true);
+  const onGoogle = async () => {
+    if (pending) return;
+    setPending('google');
     setError(null);
-    const message = await continueAsGuest();
+    const message = await signInWithGoogle();
     if (message) setError(message);
-    setBusy(false);
+    setPending(null);
   };
 
   return (
@@ -217,10 +218,13 @@ export function EmailAuthScreen({ mode }: EmailAuthScreenProps) {
 
               <Pressable
                 accessibilityRole="button"
-                disabled={busy || !ready}
+                disabled={pending !== null || !ready}
                 onPress={() => void submit()}
-                style={({ pressed }) => [styles.primaryButton, { opacity: pressed || busy ? 0.85 : 1 }]}>
-                {busy ? (
+                style={({ pressed }) => [
+                  styles.primaryButton,
+                  { opacity: pressed || pending !== null ? 0.85 : 1 },
+                ]}>
+                {pending === 'email' ? (
                   <ActivityIndicator color={Brand.white} />
                 ) : (
                   <ThemedText type="smallBold" style={styles.primaryButtonLabel}>
@@ -241,12 +245,23 @@ export function EmailAuthScreen({ mode }: EmailAuthScreenProps) {
 
                   <Pressable
                     accessibilityRole="button"
-                    disabled={busy || !ready}
-                    onPress={() => void onGuest()}
-                    style={({ pressed }) => [styles.guestButton, { opacity: pressed || busy ? 0.7 : 1 }]}>
-                    <ThemedText type="smallBold" style={styles.guestButtonLabel}>
-                      Continue as guest
-                    </ThemedText>
+                    accessibilityLabel="Continue with Google"
+                    disabled={pending !== null || !ready}
+                    onPress={() => void onGoogle()}
+                    style={({ pressed }) => [
+                      styles.googleButton,
+                      { opacity: pressed || pending !== null ? 0.7 : 1 },
+                    ]}>
+                    {pending === 'google' ? (
+                      <ActivityIndicator color={Brand.green} />
+                    ) : (
+                      <View style={styles.googleContent}>
+                        <AntDesign name="google" size={18} color={Brand.green} />
+                        <ThemedText type="smallBold" style={styles.googleButtonLabel}>
+                          Continue with Google
+                        </ThemedText>
+                      </View>
+                    )}
                   </Pressable>
                 </>
               ) : null}
@@ -369,7 +384,7 @@ const styles = StyleSheet.create({
   dividerLabel: {
     color: C.textSecondary,
   },
-  guestButton: {
+  googleButton: {
     width: '100%',
     height: 52,
     borderRadius: Spacing.two,
@@ -379,7 +394,12 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: Brand.green,
   },
-  guestButtonLabel: {
+  googleContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  googleButtonLabel: {
     color: Brand.green,
     fontSize: 16,
   },

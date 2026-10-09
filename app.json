@@ -18,7 +18,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.sowishi1738.DALAN"
+      "package": "com.sowishi1738.DALAN",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "output": "static",
@@ -68,7 +69,8 @@
           "forceCxx20": true,
           "enableOpenCL": true
         }
-      ]
+      ],
+      "@react-native-google-signin/google-signin"
     ],
     "experiments": {
       "typedRoutes": true,

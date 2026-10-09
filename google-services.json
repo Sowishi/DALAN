@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "129442564816",
+    "project_id": "dalan-7816f",
+    "storage_bucket": "dalan-7816f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:129442564816:android:6a7c4fee7737268ae66cd5",
+        "android_client_info": {
+          "package_name": "com.sowishi1738.DALAN"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "129442564816-bsilnco9cjn33dsd0lp8b8446ggg2478.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.sowishi1738.DALAN",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "129442564816-7ubgbgis5fide1ek5t7ap7ge8lnsmrjh.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCNOgkXBSBx9RvYX6-Pk0fsWYtrzja-X2s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "129442564816-7ubgbgis5fide1ek5t7ap7ge8lnsmrjh.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -24,7 +24,12 @@ export function ProfileButton({ size = 28 }: ProfileButtonProps) {
     user?.displayName?.trim() ||
     (user?.isAnonymous ? 'Guest' : user?.email?.split('@')[0] || 'Account');
   const email = user?.isAnonymous ? 'No email on this guest session' : user?.email || 'No email';
-  const account = user?.isAnonymous ? 'Guest' : 'Email';
+  const account =
+    user?.isAnonymous || user?.providerId === 'anonymous'
+      ? 'Guest'
+      : user?.providerId === 'google.com'
+        ? 'Google'
+        : 'Email';
 
   const close = () => {
     if (busy) return;

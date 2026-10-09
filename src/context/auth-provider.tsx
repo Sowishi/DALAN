@@ -2,8 +2,8 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 
 import {
   authErrorMessage,
-  continueAsGuest as requestGuest,
   signInWithEmail,
+  signInWithGoogle,
   signOutUser,
   signUpWithEmail,
   subscribeAuth,
@@ -15,7 +15,7 @@ type AuthContextValue = {
   ready: boolean;
   signIn: (email: string, password: string) => Promise<string | null>;
   signUp: (name: string, email: string, password: string) => Promise<string | null>;
-  continueAsGuest: () => Promise<string | null>;
+  signInWithGoogle: () => Promise<string | null>;
   signOut: () => Promise<void>;
 };
 
@@ -52,12 +52,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return authErrorMessage(error);
         }
       },
-      continueAsGuest: async () => {
+      signInWithGoogle: async () => {
         try {
-          await requestGuest();
+          await signInWithGoogle();
           return null;
         } catch (error) {
-          return authErrorMessage(error);
+          const message = authErrorMessage(error);
+          return message || null;
         }
       },
       signOut: signOutUser,
