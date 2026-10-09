@@ -78,7 +78,7 @@ export const FloatingTab = {
   inset: 20,
   gap: 14,
   radius: 30,
-  itemRadius: 20,
+  itemRadius: 26,
 } as const;
 
 export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;

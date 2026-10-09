@@ -1,4 +1,11 @@
+import { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View, type ColorValue } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Brand, Colors, FloatingTab } from '@/constants/theme';
@@ -9,6 +16,8 @@ const C = Colors.light;
 // Soft green wash behind the active tab.
 const ACTIVE_WASH = 'rgba(1, 81, 68, 0.10)';
 const HAIRLINE = 'rgba(0, 0, 0, 0.06)';
+
+const SPRING = { damping: 16, stiffness: 180, mass: 0.6 } as const;
 
 type TabIconRenderer = (props: {
   focused: boolean;
@@ -39,6 +48,61 @@ type FloatingTabBarProps = {
   };
 };
 
+type TabItemProps = {
+  focused: boolean;
+  label: string;
+  accessibilityLabel: string;
+  icon?: TabIconRenderer;
+  onPress: () => void;
+  onLongPress: () => void;
+};
+
+function TabItem({
+  focused,
+  label,
+  accessibilityLabel,
+  icon,
+  onPress,
+  onLongPress,
+}: TabItemProps) {
+  const active = useSharedValue(focused ? 1 : 0);
+
+  useEffect(() => {
+    active.value = withTiming(focused ? 1 : 0, { duration: 220 });
+  }, [active, focused]);
+
+  const washStyle = useAnimatedStyle(() => ({
+    opacity: active.value,
+    transform: [{ scale: 0.9 + active.value * 0.1 }],
+  }));
+
+  const contentStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: withSpring(focused ? 1.06 : 1, SPRING) }],
+  }));
+
+  const color = focused ? Brand.green : C.textSecondary;
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: focused }}
+      accessibilityLabel={accessibilityLabel}
+      onPress={onPress}
+      onLongPress={onLongPress}
+      style={styles.item}>
+      <View style={styles.itemInner}>
+        <Animated.View style={[styles.wash, washStyle]} />
+        <Animated.View style={[styles.content, contentStyle]}>
+          {icon?.({ focused, color, size: 24 })}
+          <Text numberOfLines={1} style={[styles.label, { color }]}>
+            {label}
+          </Text>
+        </Animated.View>
+      </View>
+    </Pressable>
+  );
+}
+
 export function FloatingTabBar({ state, descriptors, navigation }: FloatingTabBarProps) {
   const insets = useSafeAreaInsets();
   const bottom = Math.max(insets.bottom, 12);
@@ -47,15 +111,13 @@ export function FloatingTabBar({ state, descriptors, navigation }: FloatingTabBa
     <View pointerEvents="box-none" style={[styles.wrapper, { bottom }]}>
       <View style={styles.bar}>
         {state.routes.map((route, index) => {
-          const descriptor = descriptors[route.key];
-          const { options } = descriptor;
+          const { options } = descriptors[route.key];
           const focused = state.index === index;
 
           const label =
             typeof options.tabBarLabel === 'string'
               ? options.tabBarLabel
               : (options.title ?? route.name);
-          const color = focused ? Brand.green : C.textSecondary;
 
           const onPress = () => {
             pressHaptic();
@@ -74,21 +136,15 @@ export function FloatingTabBar({ state, descriptors, navigation }: FloatingTabBa
           };
 
           return (
-            <Pressable
+            <TabItem
               key={route.key}
-              accessibilityRole="button"
-              accessibilityState={{ selected: focused }}
+              focused={focused}
+              label={label}
               accessibilityLabel={options.tabBarAccessibilityLabel ?? label}
+              icon={options.tabBarIcon}
               onPress={onPress}
               onLongPress={onLongPress}
-              style={styles.item}>
-              <View style={[styles.itemInner, focused && styles.itemInnerActive]}>
-                {options.tabBarIcon?.({ focused, color, size: 24 })}
-                <Text numberOfLines={1} style={[styles.label, { color }]}>
-                  {label}
-                </Text>
-              </View>
-            </Pressable>
+            />
           );
         })}
       </View>
@@ -125,14 +181,19 @@ const styles = StyleSheet.create({
   itemInner: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 3,
     marginHorizontal: 4,
-    paddingVertical: 8,
-    borderRadius: FloatingTab.itemRadius,
-    backgroundColor: 'transparent',
   },
-  itemInnerActive: {
+  wash: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: FloatingTab.itemRadius,
     backgroundColor: ACTIVE_WASH,
+  },
+  content: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
   },
   label: {
     fontSize: 11,
