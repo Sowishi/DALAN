@@ -61,5 +61,19 @@ export const Spacing = {
   six: 64,
 } as const;
 
+export const Radius = {
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 22,
+  full: 9999,
+} as const;
+
+/** Apple-like spring presets for react-native-reanimated. */
+export const Motion = {
+  spring: { damping: 20, stiffness: 300, mass: 0.8 },
+  gentle: { damping: 24, stiffness: 220, mass: 1 },
+} as const;
+
 export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
 export const MaxContentWidth = 800;
