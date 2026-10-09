@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# Quick commit: stages all changes and commits with -m or an auto-generated message.
+# Usage:
+#   ./auto-commit
+#   ./auto-commit -m "fix: handle empty state"
+#   ./auto-commit fix login redirect
+#   npm run auto-commit
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$ROOT"
+
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo "auto-commit: not inside a git repository." >&2
+  exit 1
+fi
+
+MESSAGE=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -m)
+      shift
+      if [[ $# -eq 0 ]]; then
+        echo "auto-commit: -m requires a message." >&2
+        exit 1
+      fi
+      MESSAGE=$1
+      shift
+      ;;
+    -h | --help)
+      sed -n '2,8p' "$0" | sed 's/^# \?//'
+      exit 0
+      ;;
+    *)
+      MESSAGE="$*"
+      break
+      ;;
+  esac
+done
+
+if [[ -z "$(git status --porcelain)" ]]; then
+  echo "auto-commit: working tree clean — nothing to commit."
+  exit 0
+fi
+
+SENSITIVE_RE='(\.env(\.|$)|\.pem$|\.key$|\.p12$|\.jks$|\.mobileprovision$|credentials\.json$)'
+
+check_sensitive() {
+  local paths=$1
+  if echo "$paths" | grep -qiE "$SENSITIVE_RE"; then
+    echo "auto-commit: refusing to commit possible secrets:" >&2
+    echo "$paths" | grep -iE "$SENSITIVE_RE" >&2
+    exit 1
+  fi
+}
+
+check_sensitive "$(git status --porcelain | awk '{print $NF}')"
+
+git add -A
+
+check_sensitive "$(git diff --cached --name-only)"
+
+generate_message() {
+  local files summary prefix
+
+  files=$(git diff --cached --name-only)
+  summary=$(echo "$files" | head -8 | tr '\n' ', ' | sed 's/, $//')
+
+  if echo "$files" | grep -q '^src/app/'; then
+    prefix="feat"
+  elif echo "$files" | grep -qE '^\.cursor/'; then
+    prefix="chore"
+  elif echo "$files" | grep -qE '\.(tsx|ts|jsx|js)$'; then
+    prefix="update"
+  else
+    prefix="chore"
+  fi
+
+  if [[ ${#summary} -gt 72 ]]; then
+    summary="${summary:0:69}..."
+  fi
+
+  printf '%s: %s' "$prefix" "$summary"
+}
+
+if [[ -z "$MESSAGE" ]]; then
+  MESSAGE="$(generate_message)"
+fi
+
+if git commit -m "$MESSAGE"; then
+  echo "auto-commit: committed — $MESSAGE"
+else
+  echo "auto-commit: commit failed (hooks or empty index?)." >&2
+  exit 1
+fi
