@@ -14,7 +14,7 @@ export default function RootLayout() {
       <AnimatedSplashOverlay />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
-        <Stack.Screen name="home" />
+        <Stack.Screen name="(tabs)" />
       </Stack>
     </ThemeProvider>
   );

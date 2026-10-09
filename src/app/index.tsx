@@ -54,7 +54,7 @@ export default function LoginScreen() {
 
   // Anyone can enter — no account or validation required.
   const enterApp = () => {
-    router.replace('/home');
+    router.replace('/explore');
   };
 
   return (
