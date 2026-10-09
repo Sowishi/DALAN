@@ -1,7 +1,8 @@
 import { AntDesign } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Redirect, router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -11,7 +12,15 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import Animated, { Easing, Keyframe } from 'react-native-reanimated';
+import Animated, {
+  Easing,
+  interpolate,
+  Keyframe,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Pressable } from '@/components/haptic-pressable';
@@ -41,7 +50,7 @@ const logoEntrance = new Keyframe({
 const formEntrance = new Keyframe({
   0: {
     opacity: 0,
-    transform: [{ translateY: 16 }],
+    transform: [{ translateY: 24 }],
   },
   100: {
     opacity: 1,
@@ -55,14 +64,27 @@ type EmailAuthScreenProps = {
 };
 
 export function EmailAuthScreen({ mode }: EmailAuthScreenProps) {
-  const { user, ready, signIn, signUp, signInWithGoogle } = useAuth();
+  const { user, ready, signIn, signUp, signInWithGoogle, continueAsGuest } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
-  const [pending, setPending] = useState<'email' | 'google' | null>(null);
+  const [pending, setPending] = useState<'email' | 'google' | 'guest' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const isSignup = mode === 'signup';
+
+  // Gentle, continuous float for the logo.
+  const float = useSharedValue(0);
+  useEffect(() => {
+    float.value = withRepeat(
+      withTiming(1, { duration: 2800, easing: Easing.inOut(Easing.ease) }),
+      -1,
+      true,
+    );
+  }, [float]);
+  const floatStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: interpolate(float.value, [0, 1], [0, -8]) }],
+  }));
 
   if (ready && user) {
     return <Redirect href="/ask" />;
@@ -103,8 +125,29 @@ export function EmailAuthScreen({ mode }: EmailAuthScreenProps) {
     setPending(null);
   };
 
+  const onGuest = async () => {
+    if (pending) return;
+    setPending('guest');
+    setError(null);
+    const message = await continueAsGuest();
+    if (message) setError(message);
+    setPending(null);
+  };
+
   return (
     <View style={styles.container}>
+      <Image
+        style={StyleSheet.absoluteFill}
+        source={require('@/assets/images/splash_screen_bg.jpg')}
+        contentFit="cover"
+        accessibilityIgnoresInvertColors
+      />
+      <LinearGradient
+        colors={['rgba(232,247,241,0.15)', 'rgba(232,247,241,0.75)', 'rgba(255,255,255,0.97)']}
+        locations={[0, 0.45, 0.82]}
+        style={StyleSheet.absoluteFill}
+      />
+
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -115,21 +158,27 @@ export function EmailAuthScreen({ mode }: EmailAuthScreenProps) {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}>
             <Animated.View entering={logoEntrance.duration(600)} style={styles.heroSection}>
-              <Image
-                style={styles.logo}
-                source={require('@/assets/images/dalan.png')}
-                contentFit="contain"
-                accessibilityLabel="DALAN"
-              />
+              <Animated.View style={floatStyle}>
+                <Image
+                  style={styles.logo}
+                  source={require('@/assets/images/dalan.png')}
+                  contentFit="contain"
+                  accessibilityLabel="DALAN"
+                />
+              </Animated.View>
               <ThemedText type="subtitle" style={styles.heading}>
                 {isSignup ? 'Create your account' : 'Welcome back'}
               </ThemedText>
               <ThemedText type="small" style={styles.subtitle}>
-                {isSignup ? 'Register with your email to get started' : 'Find your way, every journey'}
+                {isSignup
+                  ? 'Register with your email to get started'
+                  : 'Find your way, every journey'}
               </ThemedText>
             </Animated.View>
 
-            <Animated.View entering={formEntrance.duration(500).delay(250)} style={styles.formBlock}>
+            <Animated.View
+              entering={formEntrance.duration(550).delay(220)}
+              style={styles.formCard}>
               {isSignup ? (
                 <View style={styles.field}>
                   <ThemedText type="smallBold" style={styles.label}>
@@ -263,12 +312,30 @@ export function EmailAuthScreen({ mode }: EmailAuthScreenProps) {
                       </View>
                     )}
                   </Pressable>
+
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Continue as guest"
+                    disabled={pending !== null || !ready}
+                    onPress={() => void onGuest()}
+                    style={({ pressed }) => [
+                      styles.guestButton,
+                      { opacity: pressed || pending !== null ? 0.6 : 1 },
+                    ]}>
+                    {pending === 'guest' ? (
+                      <ActivityIndicator color={C.textSecondary} />
+                    ) : (
+                      <ThemedText type="smallBold" style={styles.guestButtonLabel}>
+                        Continue as guest
+                      </ThemedText>
+                    )}
+                  </Pressable>
                 </>
               ) : null}
             </Animated.View>
 
             <View style={styles.footer}>
-              <ThemedText type="small" style={styles.subtitle}>
+              <ThemedText type="small" style={styles.footerText}>
                 {isSignup ? 'Already have an account? ' : "Don't have an account? "}
               </ThemedText>
               <Pressable
@@ -305,9 +372,9 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'center',
     width: '100%',
-    gap: Spacing.five,
+    gap: Spacing.four,
     paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.three,
+    paddingVertical: Spacing.five,
   },
   heroSection: {
     alignItems: 'center',
@@ -326,9 +393,19 @@ const styles = StyleSheet.create({
     color: C.textSecondary,
     textAlign: 'center',
   },
-  formBlock: {
+  formCard: {
     width: '100%',
     gap: Spacing.three,
+    backgroundColor: 'rgba(255,255,255,0.86)',
+    borderRadius: Spacing.four,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.9)',
+    padding: Spacing.four,
+    shadowColor: Brand.green,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
+    elevation: 6,
   },
   field: {
     width: '100%',
@@ -345,7 +422,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     fontSize: 16,
     fontFamily: Fonts.sans,
-    backgroundColor: C.backgroundElement,
+    backgroundColor: 'rgba(255,255,255,0.9)',
     color: C.text,
     borderWidth: 1,
     borderColor: C.backgroundSelected,
@@ -365,6 +442,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Brand.green,
+    shadowColor: Brand.green,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 4,
   },
   primaryButtonLabel: {
     color: Brand.white,
@@ -403,11 +485,26 @@ const styles = StyleSheet.create({
     color: Brand.green,
     fontSize: 16,
   },
+  guestButton: {
+    width: '100%',
+    height: 48,
+    borderRadius: Spacing.two,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  guestButtonLabel: {
+    color: C.textSecondary,
+    fontSize: 15,
+  },
   footer: {
     width: '100%',
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     flexWrap: 'wrap',
+  },
+  footerText: {
+    color: C.textSecondary,
+    textAlign: 'center',
   },
 });

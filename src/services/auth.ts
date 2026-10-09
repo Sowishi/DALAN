@@ -2,6 +2,7 @@ import {
   createUserWithEmailAndPassword,
   GoogleAuthProvider,
   onAuthStateChanged,
+  signInAnonymously,
   signInWithCredential,
   signInWithEmailAndPassword,
   signOut,
@@ -51,6 +52,10 @@ export async function signUpWithEmail(name: string, email: string, password: str
   }
 }
 
+export async function continueAsGuest() {
+  await signInAnonymously(auth);
+}
+
 export async function signInWithGoogle() {
   if (Platform.OS === 'web') {
     const { signInWithPopup } = await import('firebase/auth');
@@ -59,13 +64,29 @@ export async function signInWithGoogle() {
   }
 
   const { GoogleSignin } = await import('@react-native-google-signin/google-signin');
-  GoogleSignin.configure({ webClientId: GOOGLE_WEB_CLIENT_ID });
+  GoogleSignin.configure({ webClientId: GOOGLE_WEB_CLIENT_ID, offlineAccess: true });
   if (Platform.OS === 'android') {
     await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
   }
+
+  // Start from a clean session so a stale/expired cached account can't fail silently.
+  try {
+    await GoogleSignin.signOut();
+  } catch {
+    // No existing Google session to clear.
+  }
+
   const result = await GoogleSignin.signIn();
-  if (result.type !== 'success') return;
-  const idToken = result.data.idToken;
+  // google-signin v13+ returns { type, data }; older builds return the user info directly.
+  const info = result && typeof result === 'object' && 'data' in result ? result.data : result;
+  if (!info) return;
+
+  let idToken = info.idToken ?? null;
+  if (!idToken) {
+    // Some devices omit the idToken on the sign-in payload; fetch it explicitly.
+    const tokens = await GoogleSignin.getTokens();
+    idToken = tokens.idToken ?? null;
+  }
   if (!idToken) {
     throw new Error('Google did not return a sign-in token.');
   }
