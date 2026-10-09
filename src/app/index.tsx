@@ -1,4 +1,5 @@
 import { Image } from 'expo-image';
+import { router } from 'expo-router';
 import { useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -7,14 +8,16 @@ import {
   ScrollView,
   StyleSheet,
   TextInput,
+  View,
 } from 'react-native';
 import Animated, { Easing, Keyframe } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Brand, Fonts, MaxContentWidth, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { Brand, Colors, Fonts, Spacing } from '@/constants/theme';
+
+// Login always renders on a light surface, independent of system dark mode.
+const C = Colors.light;
 
 const logoEntrance = new Keyframe({
   0: {
@@ -46,23 +49,22 @@ const formEntrance = new Keyframe({
 });
 
 export default function LoginScreen() {
-  const theme = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  const canSubmit = email.trim().length > 0 && password.length > 0;
-
-  const handleLogin = () => {
-    // TODO: wire up real authentication and navigate to the main app.
+  // Anyone can enter — no account or validation required.
+  const enterApp = () => {
+    router.replace('/home');
   };
 
   return (
-    <ThemedView style={styles.container}>
+    <View style={styles.container}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <SafeAreaView style={styles.safeArea}>
           <ScrollView
+            style={styles.scroll}
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}>
@@ -73,188 +75,209 @@ export default function LoginScreen() {
                 contentFit="contain"
                 accessibilityLabel="DALAN"
               />
-              <ThemedText type="small" themeColor="textSecondary" style={styles.tagline}>
+              <ThemedText type="subtitle" style={styles.heading}>
+                Welcome back
+              </ThemedText>
+              <ThemedText type="small" style={styles.subtitle}>
                 Find your way, every journey
               </ThemedText>
             </Animated.View>
 
             <Animated.View entering={formEntrance.duration(500).delay(250)} style={styles.formBlock}>
-              <ThemedView style={styles.codeRow}>
-                <ThemedView style={styles.accentBar} />
-                <ThemedText type="code" style={styles.code}>
-                  sign in
+              <View style={styles.field}>
+                <ThemedText type="smallBold" style={styles.label}>
+                  Email
                 </ThemedText>
-              </ThemedView>
+                <TextInput
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="you@example.com"
+                  placeholderTextColor={C.textSecondary}
+                  autoCapitalize="none"
+                  autoComplete="email"
+                  keyboardType="email-address"
+                  inputMode="email"
+                  returnKeyType="next"
+                  style={styles.input}
+                />
+              </View>
 
-              <ThemedView type="backgroundElement" style={styles.formContainer}>
-                <ThemedView style={styles.field}>
-                  <ThemedText type="smallBold">Email</ThemedText>
-                  <TextInput
-                    value={email}
-                    onChangeText={setEmail}
-                    placeholder="you@example.com"
-                    placeholderTextColor={theme.textSecondary}
-                    autoCapitalize="none"
-                    autoComplete="email"
-                    keyboardType="email-address"
-                    inputMode="email"
-                    returnKeyType="next"
-                    style={[
-                      styles.input,
-                      {
-                        backgroundColor: theme.background,
-                        color: theme.text,
-                        borderColor: theme.backgroundSelected,
-                      },
-                    ]}
-                  />
-                </ThemedView>
-
-                <ThemedView style={styles.field}>
-                  <ThemedText type="smallBold">Password</ThemedText>
-                  <TextInput
-                    value={password}
-                    onChangeText={setPassword}
-                    placeholder="••••••••"
-                    placeholderTextColor={theme.textSecondary}
-                    autoCapitalize="none"
-                    autoComplete="password"
-                    secureTextEntry
-                    returnKeyType="done"
-                    onSubmitEditing={canSubmit ? handleLogin : undefined}
-                    style={[
-                      styles.input,
-                      {
-                        backgroundColor: theme.background,
-                        color: theme.text,
-                        borderColor: theme.backgroundSelected,
-                      },
-                    ]}
-                  />
-                </ThemedView>
-
-                <Pressable accessibilityRole="button" onPress={() => {}} style={styles.forgotRow}>
-                  <ThemedText type="linkPrimary">Forgot password?</ThemedText>
-                </Pressable>
-
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={!canSubmit}
-                  onPress={handleLogin}
-                  style={({ pressed }) => [
-                    styles.primaryButton,
-                    { opacity: !canSubmit ? 0.5 : pressed ? 0.85 : 1 },
-                  ]}>
-                  <ThemedText type="smallBold" style={styles.primaryButtonLabel}>
-                    Sign In
-                  </ThemedText>
-                </Pressable>
-              </ThemedView>
-
-              <ThemedView style={styles.footer}>
-                <ThemedText type="small" themeColor="textSecondary">
-                  Don&apos;t have an account?{' '}
+              <View style={styles.field}>
+                <ThemedText type="smallBold" style={styles.label}>
+                  Password
                 </ThemedText>
-                <Pressable accessibilityRole="button" onPress={() => {}}>
-                  <ThemedText type="linkPrimary">Sign up</ThemedText>
-                </Pressable>
-              </ThemedView>
+                <TextInput
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="••••••••"
+                  placeholderTextColor={C.textSecondary}
+                  autoCapitalize="none"
+                  autoComplete="password"
+                  secureTextEntry
+                  returnKeyType="done"
+                  onSubmitEditing={enterApp}
+                  style={styles.input}
+                />
+              </View>
+
+              <Pressable accessibilityRole="button" onPress={() => {}} style={styles.forgotRow}>
+                <ThemedText type="linkPrimary">Forgot password?</ThemedText>
+              </Pressable>
+
+              <Pressable
+                accessibilityRole="button"
+                onPress={enterApp}
+                style={({ pressed }) => [styles.primaryButton, { opacity: pressed ? 0.85 : 1 }]}>
+                <ThemedText type="smallBold" style={styles.primaryButtonLabel}>
+                  Sign In
+                </ThemedText>
+              </Pressable>
+
+              <View style={styles.dividerRow}>
+                <View style={styles.divider} />
+                <ThemedText type="small" style={styles.dividerLabel}>
+                  or
+                </ThemedText>
+                <View style={styles.divider} />
+              </View>
+
+              <Pressable
+                accessibilityRole="button"
+                onPress={enterApp}
+                style={({ pressed }) => [styles.guestButton, { opacity: pressed ? 0.7 : 1 }]}>
+                <ThemedText type="smallBold" style={styles.guestButtonLabel}>
+                  Continue as guest
+                </ThemedText>
+              </Pressable>
             </Animated.View>
+
+            <View style={styles.footer}>
+              <ThemedText type="small" style={styles.subtitle}>
+                Don&apos;t have an account?{' '}
+              </ThemedText>
+              <Pressable accessibilityRole="button" onPress={enterApp}>
+                <ThemedText type="linkPrimary">Sign up</ThemedText>
+              </Pressable>
+            </View>
           </ScrollView>
         </SafeAreaView>
       </KeyboardAvoidingView>
-    </ThemedView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
+    backgroundColor: C.background,
   },
   flex: {
     flex: 1,
+    width: '100%',
   },
   safeArea: {
     flex: 1,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.four,
-    alignItems: 'center',
+    width: '100%',
+  },
+  scroll: {
+    flex: 1,
+    width: '100%',
   },
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    alignSelf: 'stretch',
     width: '100%',
-    maxWidth: MaxContentWidth,
-    gap: Spacing.four,
-    paddingVertical: Spacing.five,
+    gap: Spacing.five,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.three,
   },
   heroSection: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: Spacing.two,
+    gap: Spacing.one,
   },
   logo: {
-    width: 180,
-    height: 180,
+    width: 128,
+    height: 128,
   },
-  tagline: {
+  heading: {
+    color: C.text,
+    textAlign: 'center',
+  },
+  subtitle: {
+    color: C.textSecondary,
     textAlign: 'center',
   },
   formBlock: {
-    alignSelf: 'stretch',
+    width: '100%',
     gap: Spacing.three,
-  },
-  codeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.two,
-    marginLeft: Spacing.one,
-  },
-  accentBar: {
-    width: Spacing.four,
-    height: 3,
-    borderRadius: Spacing.half,
-    backgroundColor: Brand.yellow,
-  },
-  code: {
-    textTransform: 'uppercase',
-  },
-  formContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
   },
   field: {
+    width: '100%',
     gap: Spacing.one,
   },
+  label: {
+    color: C.text,
+    alignSelf: 'stretch',
+  },
   input: {
-    height: 48,
+    width: '100%',
+    height: 52,
     borderRadius: Spacing.two,
     paddingHorizontal: Spacing.three,
     fontSize: 16,
     fontFamily: Fonts.sans,
-    borderWidth: StyleSheet.hairlineWidth,
+    backgroundColor: C.backgroundElement,
+    color: C.text,
+    borderWidth: 1,
+    borderColor: C.backgroundSelected,
   },
   forgotRow: {
-    alignSelf: 'flex-end',
+    alignSelf: 'stretch',
+    alignItems: 'flex-end',
   },
   primaryButton: {
-    height: 48,
+    width: '100%',
+    height: 52,
     borderRadius: Spacing.two,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: Spacing.one,
     backgroundColor: Brand.green,
   },
   primaryButtonLabel: {
     color: Brand.white,
+    fontSize: 16,
+  },
+  dividerRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  divider: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: C.backgroundSelected,
+  },
+  dividerLabel: {
+    color: C.textSecondary,
+  },
+  guestButton: {
+    width: '100%',
+    height: 52,
+    borderRadius: Spacing.two,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Brand.white,
+    borderWidth: 1.5,
+    borderColor: Brand.green,
+  },
+  guestButtonLabel: {
+    color: Brand.green,
+    fontSize: 16,
   },
   footer: {
+    width: '100%',
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
