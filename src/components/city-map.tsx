@@ -1,10 +1,8 @@
-import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { Platform, StyleProp, ViewStyle } from 'react-native';
 
-import { MapPlaceholder } from './map-placeholder';
+import { isExpoGo } from '@/utils/is-expo-go';
 
-// expo-maps ships native code, so it only works in a development build — not Expo Go.
-const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+import { MapPlaceholder } from './map-placeholder';
 
 const CAMERA = {
   coordinates: { latitude: 12.8797, longitude: 121.774 },
@@ -12,10 +10,11 @@ const CAMERA = {
 };
 
 export function CityMap({ style }: { style?: StyleProp<ViewStyle> }) {
-  if (isExpoGo) {
+  if (isExpoGo()) {
     return <MapPlaceholder style={style} />;
   }
 
+  // Lazy require so Expo Go never loads the native module.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { AppleMaps, GoogleMaps } = require('expo-maps');
 
