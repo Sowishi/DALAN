@@ -1,47 +1,90 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useState } from 'react';
+import * as Location from 'expo-location';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Pressable } from '@/components/haptic-pressable';
+import { LocationPicker, type PinnedLocation } from '@/components/location-picker';
+import { HAZARD_META, REPORT_CATEGORIES, type HazardType } from '@/constants/hazards';
 import { Brand, Colors, Spacing } from '@/constants/theme';
 import { useFloatingTabClearance } from '@/hooks/use-floating-tab-clearance';
+import { addReport } from '@/services/reports';
 
 const C = Colors.light;
 
 const MAX_DETAILS = 280;
 
-type Category = {
-  key: string;
-  label: string;
-  icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
-  color: string;
-};
-
-const CATEGORIES: Category[] = [
-  { key: 'flood', label: 'Flooding', icon: 'water', color: '#2D7FF9' },
-  { key: 'accident', label: 'Accident', icon: 'car-emergency', color: '#E5484D' },
-  { key: 'closure', label: 'Road closure', icon: 'road-variant', color: Brand.yellow },
-  { key: 'hazard', label: 'Hazard', icon: 'alert', color: '#F76808' },
-];
-
 export default function ReportScreen() {
   const tabClearance = useFloatingTabClearance();
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<HazardType | null>(null);
   const [details, setDetails] = useState('');
+  const [pin, setPin] = useState<PinnedLocation | null>(null);
+  const [focusNonce, setFocusNonce] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
 
-  const canSubmit = selected !== null && !submitting;
+  useEffect(() => {
+    let active = true;
 
-  const handleSubmit = () => {
-    if (!canSubmit) return;
+    const locate = async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== Location.PermissionStatus.GRANTED || !active) return;
+
+      const fix = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.BestForNavigation,
+      });
+      if (!active) return;
+
+      setPin({ latitude: fix.coords.latitude, longitude: fix.coords.longitude });
+      setFocusNonce((n) => n + 1);
+    };
+
+    void locate();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const recenterOnGps = async () => {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== Location.PermissionStatus.GRANTED) {
+      setError('Location permission is needed to pin the report.');
+      return;
+    }
+
+    const fix = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.BestForNavigation,
+    });
+    setPin({ latitude: fix.coords.latitude, longitude: fix.coords.longitude });
+    setFocusNonce((n) => n + 1);
+  };
+
+  const canSubmit = selected !== null && pin !== null && !submitting;
+
+  const handleSubmit = async () => {
+    if (!selected || !pin || submitting) return;
     setSubmitting(true);
-    // Simulated submission; replace with real API call.
-    setTimeout(() => {
-      setSubmitting(false);
+    setError(null);
+    setSuccess(false);
+
+    try {
+      await addReport({
+        type: selected,
+        title: HAZARD_META[selected].label,
+        description: details.trim(),
+        latitude: pin.latitude,
+        longitude: pin.longitude,
+      });
       setSelected(null);
       setDetails('');
-    }, 1200);
+      setSuccess(true);
+    } catch {
+      setError('Could not save the report. Check your connection and try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -59,7 +102,7 @@ export default function ReportScreen() {
           <View style={styles.section}>
             <Text style={styles.label}>What&apos;s happening?</Text>
             <View style={styles.grid}>
-              {CATEGORIES.map((cat) => {
+              {REPORT_CATEGORIES.map((cat) => {
                 const isSelected = selected === cat.key;
                 return (
                   <Pressable
@@ -67,7 +110,10 @@ export default function ReportScreen() {
                     accessibilityRole="button"
                     accessibilityState={{ selected: isSelected }}
                     accessibilityLabel={cat.label}
-                    onPress={() => setSelected(cat.key)}
+                    onPress={() => {
+                      setSelected(cat.key);
+                      setSuccess(false);
+                    }}
                     style={({ pressed }) => [
                       styles.categoryCard,
                       isSelected && styles.categoryCardSelected,
@@ -90,19 +136,14 @@ export default function ReportScreen() {
 
           <View style={styles.section}>
             <Text style={styles.label}>Location</Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Change location"
-              style={({ pressed }) => [styles.locationRow, pressed && styles.pressed]}>
-              <View style={styles.locationIcon}>
-                <Ionicons name="location" size={18} color={Brand.green} />
-              </View>
-              <View style={styles.locationBody}>
-                <Text style={styles.locationText}>Current location</Text>
-                <Text style={styles.locationSub}>Metro Manila</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={C.textSecondary} />
-            </Pressable>
+            <LocationPicker
+              location={pin}
+              focusNonce={focusNonce}
+              onChange={setPin}
+              onRecenter={() => {
+                void recenterOnGps();
+              }}
+            />
           </View>
 
           <View style={styles.section}>
@@ -122,6 +163,9 @@ export default function ReportScreen() {
               style={styles.textArea}
             />
           </View>
+
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+          {success ? <Text style={styles.success}>Report posted. It now shows on the map.</Text> : null}
         </ScrollView>
 
         <View style={[styles.footer, { paddingBottom: tabClearance }]}>
@@ -130,7 +174,9 @@ export default function ReportScreen() {
             accessibilityLabel="Submit report"
             accessibilityState={{ disabled: !canSubmit, busy: submitting }}
             disabled={!canSubmit}
-            onPress={handleSubmit}
+            onPress={() => {
+              void handleSubmit();
+            }}
             style={({ pressed }) => [
               styles.submit,
               !canSubmit && styles.submitDisabled,
@@ -196,25 +242,6 @@ const styles = StyleSheet.create({
   },
   categoryLabel: { fontSize: 15, fontWeight: '600', color: C.text },
   checkSlot: { position: 'absolute', top: Spacing.two, right: Spacing.two },
-  locationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.three,
-    padding: Spacing.three,
-    borderRadius: Spacing.three,
-    backgroundColor: C.backgroundElement,
-  },
-  locationIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: `${Brand.green}1A`,
-  },
-  locationBody: { flex: 1, gap: 1 },
-  locationText: { fontSize: 15, fontWeight: '600', color: C.text },
-  locationSub: { fontSize: 13, color: C.textSecondary },
   textArea: {
     minHeight: 120,
     borderRadius: Spacing.three,
@@ -225,6 +252,8 @@ const styles = StyleSheet.create({
     backgroundColor: C.backgroundElement,
     textAlignVertical: 'top',
   },
+  error: { fontSize: 14, color: '#E5484D' },
+  success: { fontSize: 14, color: Brand.green, fontWeight: '600' },
   footer: {
     paddingHorizontal: Spacing.three,
     paddingTop: Spacing.two,

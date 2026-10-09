@@ -1,16 +1,18 @@
-/**
- * Street hindrances shown on the map. Sample data for now — swap `SAMPLE_HAZARDS`
- * for live reports (e.g. Firebase) later without touching the map component.
- */
+import type { ComponentProps } from 'react';
+
+import type { MaterialCommunityIcons } from '@expo/vector-icons';
 
 export type HazardType =
   | 'flood'
+  | 'accident'
+  | 'closure'
+  | 'hazard'
   | 'manhole'
   | 'garbage'
   | 'pothole'
-  | 'accident'
-  | 'closure'
-  | 'debris';
+  | 'debris'
+  | 'construction'
+  | 'other';
 
 export type Hazard = {
   id: string;
@@ -21,80 +23,44 @@ export type Hazard = {
   longitude: number;
 };
 
-export const HAZARD_META: Record<HazardType, { label: string; color: string }> = {
-  flood: { label: 'Flooding', color: '#2D7FF9' },
-  manhole: { label: 'Open manhole', color: '#7C3AED' },
-  garbage: { label: 'Garbage', color: '#65A30D' },
-  pothole: { label: 'Pothole', color: '#F76808' },
-  accident: { label: 'Accident', color: '#E5484D' },
-  closure: { label: 'Road closure', color: '#D97706' },
-  debris: { label: 'Debris', color: '#6B7280' },
+export type HazardMeta = {
+  label: string;
+  color: string;
+  icon: ComponentProps<typeof MaterialCommunityIcons>['name'];
 };
 
-export const SAMPLE_HAZARDS: Hazard[] = [
-  {
-    id: 'h1',
-    type: 'flood',
-    title: 'Flooded road',
-    description: 'Knee-deep flooding near the intersection. Avoid if possible.',
-    latitude: 14.5995,
-    longitude: 120.9842,
-  },
-  {
-    id: 'h2',
-    type: 'manhole',
-    title: 'Open manhole',
-    description: 'Missing cover on the sidewalk. Hazard for pedestrians.',
-    latitude: 14.6042,
-    longitude: 120.9822,
-  },
-  {
-    id: 'h3',
-    type: 'garbage',
-    title: 'Garbage pile',
-    description: 'Uncollected garbage blocking half of the lane.',
-    latitude: 14.5958,
-    longitude: 120.987,
-  },
-  {
-    id: 'h4',
-    type: 'pothole',
-    title: 'Deep pothole',
-    description: 'Large pothole on the outer lane. Drive with caution.',
-    latitude: 14.601,
-    longitude: 120.9901,
-  },
-  {
-    id: 'h5',
-    type: 'accident',
-    title: 'Vehicle accident',
-    description: 'Two-car collision reported. Expect delays.',
-    latitude: 14.5932,
-    longitude: 120.9815,
-  },
-  {
-    id: 'h6',
-    type: 'closure',
-    title: 'Road closure',
-    description: 'Street closed for repairs until this evening.',
-    latitude: 14.6075,
-    longitude: 120.988,
-  },
-  {
-    id: 'h7',
-    type: 'debris',
-    title: 'Road debris',
-    description: 'Fallen branches and debris partially blocking the road.',
-    latitude: 14.5968,
-    longitude: 120.9795,
-  },
-];
+export const HAZARD_META: Record<HazardType, HazardMeta> = {
+  flood: { label: 'Flooding', color: '#2D7FF9', icon: 'water' },
+  accident: { label: 'Accident', color: '#E5484D', icon: 'car-emergency' },
+  closure: { label: 'Road closure', color: '#D97706', icon: 'road-variant' },
+  hazard: { label: 'Hazard', color: '#F76808', icon: 'alert' },
+  manhole: { label: 'Manhole', color: '#7C3AED', icon: 'circle-outline' },
+  garbage: { label: 'Garbage', color: '#65A30D', icon: 'trash-can' },
+  pothole: { label: 'Pothole', color: '#F76808', icon: 'checkbox-blank-circle' },
+  debris: { label: 'Debris', color: '#6B7280', icon: 'tree' },
+  construction: { label: 'Construction', color: '#CA8A04', icon: 'excavator' },
+  other: { label: 'Other', color: '#015144', icon: 'dots-horizontal' },
+};
 
-/** Hazards with their display color resolved, ready to send into the map. */
-export function hazardsWithColor() {
-  return SAMPLE_HAZARDS.map((hazard) => ({
-    ...hazard,
-    label: HAZARD_META[hazard.type].label,
-    color: HAZARD_META[hazard.type].color,
-  }));
+export const REPORT_CATEGORIES = (
+  Object.keys(HAZARD_META) as HazardType[]
+).map((key) => ({
+  key,
+  ...HAZARD_META[key],
+}));
+
+export function isHazardType(value: string): value is HazardType {
+  return value in HAZARD_META;
+}
+
+/** Reports with display color and label resolved, ready to send into the map. */
+export function hazardsWithColor(hazards: Hazard[]) {
+  return hazards.map((hazard) => {
+    const meta = HAZARD_META[hazard.type] ?? HAZARD_META.other;
+    return {
+      ...hazard,
+      label: meta.label,
+      color: meta.color,
+    };
+  });
 }

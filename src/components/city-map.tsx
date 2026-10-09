@@ -36,15 +36,13 @@ function getMagnetometer(): MagnetometerModule | null {
 import { hazardsWithColor } from '@/constants/hazards';
 import { Brand, Colors } from '@/constants/theme';
 import { useFloatingTabClearance } from '@/hooks/use-floating-tab-clearance';
+import { useReports } from '@/hooks/use-reports';
 import { pressHaptic } from '@/utils/haptics';
 
 import { MapPlaceholder } from './map-placeholder';
 
 const C = Colors.light;
 const HAIRLINE = 'rgba(0, 0, 0, 0.06)';
-
-// Resolved once; swap the data source behind `hazardsWithColor` for live reports.
-const HAZARDS_JSON = JSON.stringify(hazardsWithColor());
 
 // Camera centered on the Philippines until a precise fix arrives.
 const CAMERA = {
@@ -92,9 +90,19 @@ export function CityMap({ style }: { style?: StyleProp<ViewStyle> }) {
 function OpenStreetMap({ style }: { style?: StyleProp<ViewStyle> }) {
   const insets = useSafeAreaInsets();
   const location = usePreciseLocation();
+  const reports = useReports();
   const clearance = useFloatingTabClearance();
   const webViewRef = useRef<WebView>(null);
   const mapReady = useRef(false);
+
+  const drawHazards = useCallback((list: typeof reports) => {
+    const json = JSON.stringify(hazardsWithColor(list));
+    webViewRef.current?.injectJavaScript(`window.setHazards(${JSON.stringify(json)}); true;`);
+  }, []);
+
+  useEffect(() => {
+    if (mapReady.current) drawHazards(reports);
+  }, [drawHazards, reports]);
 
   const [fromText, setFromText] = useState('');
   const [toText, setToText] = useState('');
@@ -221,11 +229,13 @@ function OpenStreetMap({ style }: { style?: StyleProp<ViewStyle> }) {
 
       const prev = headingRef.current;
       // Low-pass filter across the 0/360 wrap so the beam eases instead of jittering.
-      const smoothed =
-        prev == null ? raw : (prev + ((((raw - prev) % 360) + 540) % 360) - 180) * 0.15 + 360) % 360;
-
-      // Skip tiny changes so the beam stays calm when the phone is nearly still.
-      if (prev != null && Math.abs((((smoothed - prev) % 360) + 540) % 360 - 180) < 1) return;
+      let smoothed = raw;
+      if (prev != null) {
+        const delta = ((((raw - prev) % 360) + 540) % 360) - 180;
+        smoothed = (((prev + delta * 0.15) % 360) + 360) % 360;
+        // Skip tiny changes so the beam stays calm when the phone is nearly still.
+        if (Math.abs(delta) < 1) return;
+      }
 
       headingRef.current = smoothed;
       webViewRef.current?.injectJavaScript(`window.setHeading(${smoothed}); true;`);
@@ -358,9 +368,7 @@ function OpenStreetMap({ style }: { style?: StyleProp<ViewStyle> }) {
         androidLayerType="hardware"
         onLoadEnd={() => {
           mapReady.current = true;
-          webViewRef.current?.injectJavaScript(
-            `window.setHazards(${JSON.stringify(HAZARDS_JSON)}); true;`,
-          );
+          drawHazards(reports);
           if (location) placeMarker(location);
         }}
       />
