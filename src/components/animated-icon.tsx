@@ -17,13 +17,20 @@ const DURATION = 600;
 
 export function AnimatedSplashOverlay() {
   const [visible, setVisible] = useState(true);
+  const [blocksTouches, setBlocksTouches] = useState(true);
   const overlay = useSharedValue(1);
   const logo = useSharedValue(0);
 
   useEffect(() => {
     let alive = true;
     const dismiss = () => {
-      if (alive) setVisible(false);
+      if (alive) {
+        setBlocksTouches(false);
+        setVisible(false);
+      }
+    };
+    const releaseTouches = () => {
+      if (alive) setBlocksTouches(false);
     };
 
     void SplashScreen.hideAsync().catch(() => undefined);
@@ -32,6 +39,8 @@ export function AnimatedSplashOverlay() {
       duration: 780,
       easing: Easing.out(Easing.cubic),
     });
+    // Stop intercepting taps as soon as the overlay begins fading — opacity 0 still had pointerEvents="auto".
+    const touchRelease = setTimeout(releaseTouches, 1680);
     overlay.value = withDelay(
       1680,
       withTiming(0, { duration: 520, easing: Easing.inOut(Easing.cubic) }, (finished) => {
@@ -42,6 +51,7 @@ export function AnimatedSplashOverlay() {
     const fallback = setTimeout(dismiss, 3200);
     return () => {
       alive = false;
+      clearTimeout(touchRelease);
       clearTimeout(fallback);
     };
   }, [logo, overlay]);
@@ -57,7 +67,9 @@ export function AnimatedSplashOverlay() {
   if (!visible) return null;
 
   return (
-    <Animated.View style={[styles.splashOverlay, overlayStyle]} pointerEvents="auto">
+    <Animated.View
+      style={[styles.splashOverlay, overlayStyle]}
+      pointerEvents={blocksTouches ? 'auto' : 'none'}>
       <Image
         source={require('@/assets/images/splash_screen_bg.jpg')}
         style={StyleSheet.absoluteFill}

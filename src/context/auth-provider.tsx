@@ -10,7 +10,6 @@ import {
   subscribeAuth,
   type AuthUser,
 } from '@/services/auth';
-
 type AuthContextValue = {
   user: AuthUser | null;
   ready: boolean;
@@ -28,10 +27,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    return subscribeAuth((next) => {
+    const unsub = subscribeAuth((next) => {
       setUser(next);
       setReady(true);
     });
+    // Ensure login actions are not stuck disabled if the first auth callback is delayed.
+    const fallback = setTimeout(() => setReady(true), 1500);
+    return () => {
+      unsub();
+      clearTimeout(fallback);
+    };
   }, []);
 
   const value = useMemo<AuthContextValue>(

@@ -1,4 +1,3 @@
-import { AntDesign } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Redirect, router } from 'expo-router';
@@ -64,12 +63,12 @@ type EmailAuthScreenProps = {
 };
 
 export function EmailAuthScreen({ mode }: EmailAuthScreenProps) {
-  const { user, ready, signIn, signUp, signInWithGoogle, continueAsGuest } = useAuth();
+  const { user, ready, signIn, signUp, continueAsGuest } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
-  const [pending, setPending] = useState<'email' | 'google' | 'guest' | null>(null);
+  const [pending, setPending] = useState<'email' | 'guest' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const isSignup = mode === 'signup';
 
@@ -112,15 +111,6 @@ export function EmailAuthScreen({ mode }: EmailAuthScreenProps) {
     const message = isSignup
       ? await signUp(name, email, password)
       : await signIn(email, password);
-    if (message) setError(message);
-    setPending(null);
-  };
-
-  const onGoogle = async () => {
-    if (pending) return;
-    setPending('google');
-    setError(null);
-    const message = await signInWithGoogle();
     if (message) setError(message);
     setPending(null);
   };
@@ -178,7 +168,8 @@ export function EmailAuthScreen({ mode }: EmailAuthScreenProps) {
 
             <Animated.View
               entering={formEntrance.duration(550).delay(220)}
-              style={styles.formCard}>
+              style={styles.formCard}
+              pointerEvents="box-none">
               {isSignup ? (
                 <View style={styles.field}>
                   <ThemedText type="smallBold" style={styles.label}>
@@ -267,7 +258,7 @@ export function EmailAuthScreen({ mode }: EmailAuthScreenProps) {
 
               <Pressable
                 accessibilityRole="button"
-                disabled={pending !== null || !ready}
+                disabled={pending !== null}
                 onPress={() => void submit()}
                 style={({ pressed }) => [
                   styles.primaryButton,
@@ -294,29 +285,8 @@ export function EmailAuthScreen({ mode }: EmailAuthScreenProps) {
 
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel="Continue with Google"
-                    disabled={pending !== null || !ready}
-                    onPress={() => void onGoogle()}
-                    style={({ pressed }) => [
-                      styles.googleButton,
-                      { opacity: pressed || pending !== null ? 0.7 : 1 },
-                    ]}>
-                    {pending === 'google' ? (
-                      <ActivityIndicator color={Brand.green} />
-                    ) : (
-                      <View style={styles.googleContent}>
-                        <AntDesign name="google" size={18} color={Brand.green} />
-                        <ThemedText type="smallBold" style={styles.googleButtonLabel}>
-                          Continue with Google
-                        </ThemedText>
-                      </View>
-                    )}
-                  </Pressable>
-
-                  <Pressable
-                    accessibilityRole="button"
                     accessibilityLabel="Continue as guest"
-                    disabled={pending !== null || !ready}
+                    disabled={pending !== null}
                     onPress={() => void onGuest()}
                     style={({ pressed }) => [
                       styles.guestButton,
@@ -465,25 +435,6 @@ const styles = StyleSheet.create({
   },
   dividerLabel: {
     color: C.textSecondary,
-  },
-  googleButton: {
-    width: '100%',
-    height: 52,
-    borderRadius: Spacing.two,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Brand.white,
-    borderWidth: 1.5,
-    borderColor: Brand.green,
-  },
-  googleContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.two,
-  },
-  googleButtonLabel: {
-    color: Brand.green,
-    fontSize: 16,
   },
   guestButton: {
     width: '100%',

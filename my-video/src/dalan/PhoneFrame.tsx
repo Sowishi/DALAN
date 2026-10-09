@@ -1,6 +1,12 @@
 import React from "react";
-import { AbsoluteFill } from "remotion";
-import { Brand, C, FONT, PHONE } from "./theme";
+import {
+  AbsoluteFill,
+  Easing,
+  interpolate,
+  useCurrentFrame,
+  useVideoConfig,
+} from "remotion";
+import { Brand, C, EASE_OUT, FONT, PHONE } from "./theme";
 import { Icon } from "./Icon";
 
 const SCREEN_W = PHONE.width - PHONE.bezel * 2;
@@ -16,6 +22,22 @@ export const PhoneFrame: React.FC<{
   readonly style?: React.CSSProperties;
   readonly screenBackground?: string;
 }> = ({ children, style, screenBackground = C.background }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  // Gentle entrance: the phone rises and settles into place.
+  const enterScale = interpolate(frame, [0, fps * 0.6], [0.955, 1], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+    easing: Easing.bezier(...EASE_OUT),
+  });
+  const enterY = interpolate(frame, [0, fps * 0.7], [26, 0], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+    easing: Easing.bezier(...EASE_OUT),
+  });
+  // Soft idle float so held frames never feel static.
+  const floatY = Math.sin(frame / fps) * 5;
+
   return (
     <AbsoluteFill style={{ justifyContent: "center", alignItems: "center" }}>
       <div
@@ -26,6 +48,8 @@ export const PhoneFrame: React.FC<{
           background: "#0B1512",
           padding: PHONE.bezel,
           boxShadow: "0 40px 90px rgba(1,81,68,0.18)",
+          translate: `0px ${enterY + floatY}px`,
+          scale: `${enterScale}`,
           ...style,
         }}
       >

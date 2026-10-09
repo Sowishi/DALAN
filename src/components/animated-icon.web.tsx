@@ -8,16 +8,21 @@ const DURATION = 300;
 
 export function AnimatedSplashOverlay() {
   const [visible, setVisible] = useState(true);
+  const [blocksTouches, setBlocksTouches] = useState(true);
 
   useEffect(() => {
+    const release = setTimeout(() => setBlocksTouches(false), 1680);
     const hide = setTimeout(() => setVisible(false), 2200);
-    return () => clearTimeout(hide);
+    return () => {
+      clearTimeout(release);
+      clearTimeout(hide);
+    };
   }, []);
 
   if (!visible) return null;
 
   return (
-    <View style={styles.splashOverlay} pointerEvents="auto">
+    <View style={styles.splashOverlay} pointerEvents={blocksTouches ? 'auto' : 'none'}>
       <Image
         style={StyleSheet.absoluteFill}
         source={require('@/assets/images/splash_screen_bg.jpg')}

@@ -8,17 +8,42 @@ import {
 } from "remotion";
 import { Brand, C, EASE_OUT, FONT } from "./theme";
 
-/** Soft near-white backdrop with a faint green wash — generous, calm, no neon. */
+/** Soft near-white backdrop with slowly drifting brand-color blobs — calm, no neon. */
 export const SceneBackground: React.FC<{ readonly children?: React.ReactNode }> = ({
   children,
 }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const t = frame / fps;
+  const blob = (
+    cx: number,
+    cy: number,
+    size: number,
+    color: string,
+    speed: number,
+    phase: number,
+  ): React.CSSProperties => ({
+    position: "absolute",
+    left: cx + Math.sin(t * speed + phase) * 60,
+    top: cy + Math.cos(t * speed * 0.8 + phase) * 50,
+    width: size,
+    height: size,
+    borderRadius: "50%",
+    background: `radial-gradient(circle, ${color} 0%, rgba(0,0,0,0) 70%)`,
+    filter: "blur(40px)",
+  });
+
   return (
     <AbsoluteFill
       style={{
         background: "linear-gradient(180deg, #FFFFFF 0%, #F2F7F6 60%, #EAF2F0 100%)",
         fontFamily: FONT,
+        overflow: "hidden",
       }}
     >
+      <div style={blob(-120, 120, 640, "rgba(1,81,68,0.10)", 0.18, 0)} />
+      <div style={blob(760, 220, 560, "rgba(254,190,60,0.12)", 0.14, 2)} />
+      <div style={blob(560, 1480, 720, "rgba(1,81,68,0.08)", 0.12, 4)} />
       {children}
     </AbsoluteFill>
   );
@@ -58,6 +83,11 @@ export const SceneLabel: React.FC<{
     extrapolateRight: "clamp",
     easing: Easing.bezier(...EASE_OUT),
   });
+  const underline = interpolate(t, [fps * 0.3, fps * 1.1], [0, 150], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+    easing: Easing.bezier(...EASE_OUT),
+  });
   return (
     <div
       style={{
@@ -65,16 +95,26 @@ export const SceneLabel: React.FC<{
         top: 104,
         left: 0,
         right: 0,
-        textAlign: "center",
-        fontSize: 64,
-        fontWeight: 700,
-        letterSpacing: -1.4,
-        color: Brand.green,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 16,
         opacity,
         translate: `0px ${translate}px`,
       }}
     >
-      {children}
+      <div
+        style={{
+          textAlign: "center",
+          fontSize: 64,
+          fontWeight: 700,
+          letterSpacing: -1.4,
+          color: Brand.green,
+        }}
+      >
+        {children}
+      </div>
+      <div style={{ width: underline, height: 5, borderRadius: 3, background: Brand.yellow }} />
     </div>
   );
 };
