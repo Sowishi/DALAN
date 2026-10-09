@@ -1,5 +1,6 @@
-import { HAZARD_META, type Hazard, type HazardType } from '@/constants/hazards';
+import { HAZARD_META, riskForHazard, type Hazard, type HazardType } from '@/constants/hazards';
 import { addReport, getReports } from '@/services/reports';
+import { distanceMeters, type LatLng } from '@/utils/geo';
 
 export type PendingReport = {
   type: HazardType;
@@ -98,9 +99,105 @@ export function extractDetails(text: string, type: HazardType): string {
   return stripped;
 }
 
-export function formatListReply(reports: Hazard[], summary: string): string {
-  if (!reports.length) {
-    return 'I do not see any live hindrances right now. You can file one if you spot something.';
+const NEARBY_M = 2000;
+
+function formatDistance(meters: number) {
+  if (meters < 80) return 'under 80 m away';
+  if (meters < 1000) return `about ${Math.round(meters / 10) * 10} m away`;
+  const km = meters / 1000;
+  const shown = km < 10 ? km.toFixed(1) : String(Math.round(km));
+  return `about ${shown} km away`;
+}
+
+function placeOf(report: Hazard) {
+  const address = report.address?.trim();
+  if (address) return address;
+  const note = report.description.replace(/severity:\s*(low|moderate|high)/gi, '').replace(/\s+/g, ' ').trim();
+  return note ? note.slice(0, 80) : null;
+}
+
+function riskPhrase(report: Hazard) {
+  const level = riskForHazard(report);
+  if (level === 'high') return 'high risk';
+  if (level === 'moderate') return 'moderate risk';
+  return 'low risk';
+}
+
+function floodOutlookLine(label?: string | null) {
+  if (label === 'High') return ' River levels are high here, so roads may still flood.';
+  if (label === 'Watch') return ' River levels are up, so watch for water on the road.';
+  return '';
+}
+
+function describeReport(report: Hazard, meters: number | null) {
+  const where = placeOf(report);
+  const risk = riskPhrase(report);
+  const distance = meters == null ? null : formatDistance(meters);
+  if (distance && where) return `${distance}, ${risk}, near ${where}`;
+  if (distance) return `${distance}, ${risk}`;
+  if (where) return `${risk}, near ${where}`;
+  return risk;
+}
+
+/** Plain answer for “any flooding nearby?” and similar questions. */
+export function formatListReply(
+  reports: Hazard[],
+  question: string,
+  origin: LatLng | null,
+  floodOutlook?: string | null,
+) {
+  const type = detectHazardType(question);
+  const focused = type ? reports.filter((report) => report.type === type) : reports;
+  const name = type ? HAZARD_META[type].label.toLowerCase() : 'hindrances';
+  const outlook = type === 'flood' ? floodOutlookLine(floodOutlook) : '';
+
+  const ranked = focused
+    .map((report) => ({
+      report,
+      meters: origin ? distanceMeters(origin, report) : null,
+    }))
+    .sort((a, b) => (a.meters ?? Number.POSITIVE_INFINITY) - (b.meters ?? Number.POSITIVE_INFINITY));
+
+  if (!ranked.length) {
+    const subject = type === 'flood' ? 'flooding' : name;
+    return `No ${subject} is reported on the map right now.${outlook}`;
   }
-  return `Here is what is on the map:\n${summary}`;
+
+  const nearby = origin ? ranked.filter((item) => (item.meters ?? Infinity) <= NEARBY_M) : ranked;
+  const shown = (nearby.length ? nearby : ranked).slice(0, 3);
+
+  if (origin && !nearby.length) {
+    const closest = ranked[0];
+    const detail = describeReport(closest.report, closest.meters);
+    const subject = type === 'flood' ? 'flooding' : name;
+    return `No ${subject} within 2 km of you. The closest report is ${detail}.${outlook}`;
+  }
+
+  const details = shown.map((item) => describeReport(item.report, item.meters));
+  const count = nearby.length;
+
+  if (type === 'flood') {
+    const advice = ' Slow down and stay out of deep water.';
+    const lead = !origin
+      ? ranked.length === 1
+        ? 'There is 1 flooding report on the map. I do not have your location, so I cannot tell if it is nearby.'
+        : `There are ${ranked.length} flooding reports on the map. I do not have your location, so I cannot tell which are nearby.`
+      : count === 1
+        ? 'Yes. Flooding is reported nearby.'
+        : `Yes. ${count} flooding reports are nearby.`;
+    if (details.length === 1) return `${lead}${origin ? advice : ''} It is ${details[0]}.`;
+    const lines = details.map((line) => `• ${line.charAt(0).toUpperCase()}${line.slice(1)}.`).join('\n');
+    return `${lead}${origin ? advice : ''}\n${lines}`;
+  }
+
+  const lead = origin
+    ? count === 1
+      ? `One ${name} report is nearby.`
+      : `${count} ${name} reports are nearby.`
+    : count === 1
+      ? `One ${name} report is on the map. I do not have your location, so I cannot say how close it is.`
+      : `${count} ${name} reports are on the map. I do not have your location, so I cannot say which is closest.`;
+
+  if (details.length === 1) return `${lead} It is ${details[0]}.`;
+  return `${lead}\n${details.map((line) => `• ${line.charAt(0).toUpperCase()}${line.slice(1)}.`).join('\n')}`;
 }

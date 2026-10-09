@@ -1,0 +1,12 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /reports/{id} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasAll(['type', 'title', 'description', 'latitude', 'longitude', 'createdAt'])
+        && request.resource.data.latitude is number
+        && request.resource.data.longitude is number;
+      allow update, delete: if false;
+    }
+  }
+}

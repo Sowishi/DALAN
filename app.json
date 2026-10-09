@@ -35,9 +35,9 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "backgroundColor": "#E8F7F1",
+          "image": "./assets/images/dalan.png",
+          "imageWidth": 180
         }
       ],
       [
@@ -51,6 +51,14 @@
         "expo-location",
         {
           "locationWhenInUsePermission": "Allow DALAN to use your precise location to show you on the map."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow DALAN to attach photos to your hazard report.",
+          "cameraPermission": "Allow DALAN to take a photo for your hazard report.",
+          "microphonePermission": false
         }
       ],
       [

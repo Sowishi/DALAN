@@ -1,61 +1,79 @@
 import { Image } from 'expo-image';
 import * as SplashScreen from 'expo-splash-screen';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Dimensions, StyleSheet, View } from 'react-native';
-import Animated, { Easing, Keyframe } from 'react-native-reanimated';
-import { scheduleOnRN } from 'react-native-worklets';
+import Animated, {
+  Easing,
+  Keyframe,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withTiming,
+} from 'react-native-reanimated';
 
 const INITIAL_SCALE_FACTOR = Dimensions.get('screen').height / 90;
 const DURATION = 600;
 
 export function AnimatedSplashOverlay() {
-  const [animate, setAnimate] = useState(false);
   const [visible, setVisible] = useState(true);
+  const overlay = useSharedValue(1);
+  const logo = useSharedValue(0);
+
+  useEffect(() => {
+    let alive = true;
+    const dismiss = () => {
+      if (alive) setVisible(false);
+    };
+
+    void SplashScreen.hideAsync().catch(() => undefined);
+
+    logo.value = withTiming(1, {
+      duration: 780,
+      easing: Easing.out(Easing.cubic),
+    });
+    overlay.value = withDelay(
+      1680,
+      withTiming(0, { duration: 520, easing: Easing.inOut(Easing.cubic) }, (finished) => {
+        if (finished) runOnJS(dismiss)();
+      }),
+    );
+
+    const fallback = setTimeout(dismiss, 3200);
+    return () => {
+      alive = false;
+      clearTimeout(fallback);
+    };
+  }, [logo, overlay]);
+
+  const overlayStyle = useAnimatedStyle(() => ({
+    opacity: overlay.value,
+  }));
+  const logoStyle = useAnimatedStyle(() => ({
+    opacity: logo.value,
+    transform: [{ scale: 0.86 + logo.value * 0.14 }],
+  }));
 
   if (!visible) return null;
 
-  const splashKeyframe = new Keyframe({
-    0: {
-      transform: [{ scale: 1 }],
-      opacity: 1,
-    },
-    20: {
-      opacity: 1,
-    },
-    70: {
-      opacity: 0,
-      easing: Easing.elastic(0.7),
-    },
-    100: {
-      opacity: 0,
-      transform: [{ scale: 1 }],
-      easing: Easing.elastic(0.7),
-    },
-  });
-
-  const image = <Image style={styles.image} source={require('@/assets/images/expo-logo.png')} />;
-
-  return animate ? (
-    <Animated.View
-      entering={splashKeyframe.duration(DURATION).withCallback((finished) => {
-        'worklet';
-        if (finished) {
-          scheduleOnRN(setVisible, false);
-        }
-      })}
-      style={styles.splashOverlay}>
-      {image}
+  return (
+    <Animated.View style={[styles.splashOverlay, overlayStyle]} pointerEvents="auto">
+      <Image
+        source={require('@/assets/images/splash_screen_bg.jpg')}
+        style={StyleSheet.absoluteFill}
+        contentFit="cover"
+        contentPosition="center"
+        accessibilityIgnoresInvertColors
+      />
+      <Animated.View style={logoStyle}>
+        <Image
+          source={require('@/assets/images/dalan.png')}
+          style={styles.brand}
+          contentFit="contain"
+          accessibilityLabel="DALAN"
+        />
+      </Animated.View>
     </Animated.View>
-  ) : (
-    <View
-      onLayout={() => {
-        SplashScreen.hideAsync().finally(() => {
-          setAnimate(true);
-        });
-      }}
-      style={styles.splashOverlay}>
-      {image}
-    </View>
   );
 }
 
@@ -131,6 +149,10 @@ const styles = StyleSheet.create({
     width: 76,
     height: 71,
   },
+  brand: {
+    width: 196,
+    height: 196,
+  },
   background: {
     borderRadius: 40,
     experimental_backgroundImage: `linear-gradient(180deg, #3C9FFE, #0274DF)`,
@@ -140,9 +162,10 @@ const styles = StyleSheet.create({
   },
   splashOverlay: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: '#208AEF',
+    backgroundColor: '#E8F7F1',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 1000,
+    zIndex: 2000,
+    elevation: 2000,
   },
 });

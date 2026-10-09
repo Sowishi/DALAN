@@ -1,23 +1,12 @@
-import { useEffect } from 'react';
+import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View, type ColorValue } from 'react-native';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withTiming,
-} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Brand, Colors, FloatingTab } from '@/constants/theme';
+import { useActivityOverlay } from '@/hooks/use-activity-overlay';
 import { pressHaptic } from '@/utils/haptics';
 
 const C = Colors.light;
-
-// Soft green wash behind the active tab.
-const ACTIVE_WASH = 'rgba(1, 81, 68, 0.10)';
-const HAIRLINE = 'rgba(0, 0, 0, 0.06)';
-
-const SPRING = { damping: 16, stiffness: 180, mass: 0.6 } as const;
 
 type TabIconRenderer = (props: {
   focused: boolean;
@@ -48,64 +37,12 @@ type FloatingTabBarProps = {
   };
 };
 
-type TabItemProps = {
-  focused: boolean;
-  label: string;
-  accessibilityLabel: string;
-  icon?: TabIconRenderer;
-  onPress: () => void;
-  onLongPress: () => void;
-};
-
-function TabItem({
-  focused,
-  label,
-  accessibilityLabel,
-  icon,
-  onPress,
-  onLongPress,
-}: TabItemProps) {
-  const active = useSharedValue(focused ? 1 : 0);
-
-  useEffect(() => {
-    active.value = withTiming(focused ? 1 : 0, { duration: 220 });
-  }, [active, focused]);
-
-  const washStyle = useAnimatedStyle(() => ({
-    opacity: active.value,
-    transform: [{ scale: 0.9 + active.value * 0.1 }],
-  }));
-
-  const contentStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: withSpring(focused ? 1.06 : 1, SPRING) }],
-  }));
-
-  const color = focused ? Brand.green : C.textSecondary;
-
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected: focused }}
-      accessibilityLabel={accessibilityLabel}
-      onPress={onPress}
-      onLongPress={onLongPress}
-      style={styles.item}>
-      <View style={styles.itemInner}>
-        <Animated.View style={[styles.wash, washStyle]} />
-        <Animated.View style={[styles.content, contentStyle]}>
-          {icon?.({ focused, color, size: 24 })}
-          <Text numberOfLines={1} style={[styles.label, { color }]}>
-            {label}
-          </Text>
-        </Animated.View>
-      </View>
-    </Pressable>
-  );
-}
-
 export function FloatingTabBar({ state, descriptors, navigation }: FloatingTabBarProps) {
   const insets = useSafeAreaInsets();
   const bottom = Math.max(insets.bottom, 12);
+  const current = state.routes[state.index];
+  const activityLive = useActivityOverlay();
+  if (current?.name === 'report' || activityLive) return null;
 
   return (
     <View pointerEvents="box-none" style={[styles.wrapper, { bottom }]}>
@@ -113,11 +50,12 @@ export function FloatingTabBar({ state, descriptors, navigation }: FloatingTabBa
         {state.routes.map((route, index) => {
           const { options } = descriptors[route.key];
           const focused = state.index === index;
-
+          const isReport = route.name === 'report';
           const label =
             typeof options.tabBarLabel === 'string'
               ? options.tabBarLabel
               : (options.title ?? route.name);
+          const color = focused ? Brand.green : C.textSecondary;
 
           const onPress = () => {
             pressHaptic();
@@ -131,20 +69,30 @@ export function FloatingTabBar({ state, descriptors, navigation }: FloatingTabBa
             }
           };
 
-          const onLongPress = () => {
-            navigation.emit({ type: 'tabLongPress', target: route.key });
-          };
-
           return (
-            <TabItem
+            <Pressable
               key={route.key}
-              focused={focused}
-              label={label}
+              accessibilityRole="button"
+              accessibilityState={{ selected: focused }}
               accessibilityLabel={options.tabBarAccessibilityLabel ?? label}
-              icon={options.tabBarIcon}
               onPress={onPress}
-              onLongPress={onLongPress}
-            />
+              onLongPress={() => {
+                navigation.emit({ type: 'tabLongPress', target: route.key });
+              }}
+              style={styles.item}>
+              <View style={[styles.itemInner, isReport && styles.reportInner]}>
+                {isReport ? (
+                  <View style={styles.action}>
+                    <Ionicons name="add" size={24} color={Brand.white} />
+                  </View>
+                ) : (
+                  options.tabBarIcon?.({ focused, color, size: 22 })
+                )}
+                <Text numberOfLines={1} style={[styles.label, { color }]}>
+                  {label}
+                </Text>
+              </View>
+            </Pressable>
           );
         })}
       </View>
@@ -157,6 +105,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: FloatingTab.inset,
     right: FloatingTab.inset,
+    paddingTop: FloatingTab.raise,
   },
   bar: {
     flexDirection: 'row',
@@ -164,36 +113,38 @@ const styles = StyleSheet.create({
     height: FloatingTab.height,
     paddingHorizontal: 8,
     borderRadius: FloatingTab.radius,
-    backgroundColor: C.background,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: HAIRLINE,
+    backgroundColor: Brand.white,
     shadowColor: '#000000',
-    shadowOpacity: 0.14,
+    shadowOpacity: 0.28,
     shadowRadius: 24,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 12,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 20,
   },
   item: {
     flex: 1,
     height: '100%',
+    alignItems: 'center',
     justifyContent: 'center',
   },
   itemInner: {
     alignItems: 'center',
-    justifyContent: 'center',
-    marginHorizontal: 4,
+    gap: 3,
   },
-  wash: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: FloatingTab.itemRadius,
-    backgroundColor: ACTIVE_WASH,
+  reportInner: {
+    marginTop: -FloatingTab.raise,
   },
-  content: {
+  action: {
+    width: FloatingTab.actionSize,
+    height: FloatingTab.actionSize,
+    borderRadius: FloatingTab.actionSize / 2,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 3,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    backgroundColor: Brand.green,
+    shadowColor: '#000000',
+    shadowOpacity: 0.24,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 22,
   },
   label: {
     fontSize: 11,

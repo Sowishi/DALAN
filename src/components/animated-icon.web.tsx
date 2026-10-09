@@ -1,4 +1,5 @@
 import { Image } from 'expo-image';
+import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { Keyframe, Easing } from 'react-native-reanimated';
 
@@ -6,7 +7,30 @@ import classes from './animated-icon.module.css';
 const DURATION = 300;
 
 export function AnimatedSplashOverlay() {
-  return null;
+  const [visible, setVisible] = useState(true);
+
+  useEffect(() => {
+    const hide = setTimeout(() => setVisible(false), 2200);
+    return () => clearTimeout(hide);
+  }, []);
+
+  if (!visible) return null;
+
+  return (
+    <View style={styles.splashOverlay} pointerEvents="auto">
+      <Image
+        style={StyleSheet.absoluteFill}
+        source={require('@/assets/images/splash_screen_bg.jpg')}
+        contentFit="cover"
+      />
+      <Image
+        style={styles.brand}
+        source={require('@/assets/images/dalan.png')}
+        contentFit="contain"
+        accessibilityLabel="DALAN"
+      />
+    </View>
+  );
 }
 
 const keyframe = new Keyframe({
@@ -104,5 +128,16 @@ const styles = StyleSheet.create({
     width: 128,
     height: 128,
     position: 'absolute',
+  },
+  brand: {
+    width: 196,
+    height: 196,
+  },
+  splashOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#E8F7F1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2000,
   },
 });

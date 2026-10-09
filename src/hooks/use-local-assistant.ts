@@ -1,9 +1,20 @@
 import { File, Paths } from 'expo-file-system';
+import * as Location from 'expo-location';
 import { initLlama, type LlamaContext } from 'llama.rn';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { ASSISTANT_GUIDE } from '@/constants/assistant-guide';
 import { HAZARD_META } from '@/constants/hazards';
+import {
+  formatConditionsReply,
+  isConditionsFresh,
+  isConditionsIntent,
+  loadConditions,
+  readCachedConditions,
+  summarizeConditions,
+  type Conditions,
+  type PlaceCoords,
+} from '@/services/conditions';
 import {
   detectHazardType,
   extractDetails,
@@ -16,6 +27,7 @@ import {
   submitReport,
   type PendingReport,
 } from '@/services/dally-tools';
+import { setSharedLlama } from '@/services/local-llm';
 import { isExpoGo } from '@/utils/is-expo-go';
 
 export type AssistantStatus = 'downloading' | 'loading' | 'ready' | 'error';
@@ -65,6 +77,7 @@ export function useLocalAssistant() {
   const releaseContext = useCallback(async () => {
     const ctx = contextRef.current;
     contextRef.current = null;
+    setSharedLlama(null);
     if (ctx) {
       await ctx.release().catch(() => undefined);
     }
@@ -146,6 +159,7 @@ export function useLocalAssistant() {
       }
 
       contextRef.current = context;
+      setSharedLlama(context);
       setLoadProgress(1);
       setStatus('ready');
     } catch (err) {
@@ -170,6 +184,30 @@ export function useLocalAssistant() {
       void releaseContext();
     };
   }, [prepare, releaseContext]);
+
+  const currentCoords = useCallback(async (fallback?: PlaceCoords) => {
+    try {
+      const { status } = await Location.getForegroundPermissionsAsync();
+      if (status !== Location.PermissionStatus.GRANTED) return fallback;
+      const fix = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      return { latitude: fix.coords.latitude, longitude: fix.coords.longitude };
+    } catch {
+      return fallback;
+    }
+  }, []);
+
+  const ensureConditions = useCallback(async () => {
+    const cached = await readCachedConditions();
+    if (isConditionsFresh(cached)) {
+      void currentCoords(cached?.coords).then((coords) => loadConditions(coords).catch(() => undefined));
+      return { data: cached, offline: false };
+    }
+
+    const coords = await currentCoords(cached?.coords);
+    return loadConditions(coords);
+  }, [currentCoords]);
 
   const appendDally = useCallback((content: string) => {
     setMessages((prev) => [...prev, { id: nextId('assistant'), role: 'assistant', content }]);
@@ -242,11 +280,25 @@ export function useLocalAssistant() {
 
     if (isListIntent(trimmed)) {
       try {
-        const { reports, summary } = await listReports();
-        appendDally(formatListReply(reports, summary));
+        const { reports } = await listReports();
+        const origin = await currentCoords();
+        const cached = detectHazardType(trimmed) === 'flood' ? await readCachedConditions() : null;
+        appendDally(formatListReply(reports, trimmed, origin ?? null, cached?.floodLabel));
       } catch {
         appendDally('I could not load live reports. Check your connection and try again.');
       }
+      return;
+    }
+
+    let conditions: { data: Conditions | null; offline: boolean } = { data: null, offline: true };
+    try {
+      conditions = await ensureConditions();
+    } catch {
+      conditions = { data: await readCachedConditions(), offline: true };
+    }
+
+    if (isConditionsIntent(trimmed)) {
+      appendDally(formatConditionsReply(conditions.data, conditions.offline));
       return;
     }
 
@@ -276,7 +328,10 @@ export function useLocalAssistant() {
       const result = await context.completion(
         {
           messages: [
-            { role: 'system', content: `${ASSISTANT_GUIDE}\nLive reports:\n${liveReports}` },
+            {
+              role: 'system',
+              content: `${ASSISTANT_GUIDE}\n${summarizeConditions(conditions.data, conditions.offline)}\nLive reports:\n${liveReports}`,
+            },
             ...history,
           ],
           n_predict: N_PREDICT,
@@ -326,7 +381,7 @@ export function useLocalAssistant() {
       generatingRef.current = false;
       setIsGenerating(false);
     }
-  }, [appendDally, cancelPending, messages, setPending]);
+  }, [appendDally, cancelPending, ensureConditions, messages, setPending]);
 
   return {
     status,

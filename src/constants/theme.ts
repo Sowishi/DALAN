@@ -74,11 +74,13 @@ export const Spacing = {
 } as const;
 
 export const FloatingTab = {
-  height: 68,
-  inset: 20,
-  gap: 14,
-  radius: 30,
+  height: 64,
+  inset: 16,
+  gap: 12,
+  radius: 32,
   itemRadius: 26,
+  raise: 28,
+  actionSize: 44,
 } as const;
 
 export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;

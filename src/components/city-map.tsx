@@ -1,14 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
+  BackHandler,
   Keyboard,
   Platform,
   Pressable,
-  ScrollView,
   StyleProp,
   StyleSheet,
   Text,
-  TextInput,
   View,
   ViewStyle,
 } from 'react-native';
@@ -33,13 +31,18 @@ function getMagnetometer(): MagnetometerModule | null {
   }
 }
 
-import { hazardsWithColor } from '@/constants/hazards';
+import { hazardsWithColor, reportMatchesFilter, type MapFilterKey } from '@/constants/hazards';
 import { Brand, Colors } from '@/constants/theme';
+import { useActivityHazards } from '@/hooks/use-activity-hazards';
 import { useFloatingTabClearance } from '@/hooks/use-floating-tab-clearance';
 import { useReports } from '@/hooks/use-reports';
+import { speakText, stopSpeech } from '@/services/speech';
 import { pressHaptic } from '@/utils/haptics';
 
+import { ActivityDallyChat } from './activity-dally-chat';
+import { MapChrome } from './map-chrome';
 import { MapPlaceholder } from './map-placeholder';
+import { MapReportSheet } from './map-report-sheet';
 
 const C = Colors.light;
 const HAIRLINE = 'rgba(0, 0, 0, 0.06)';
@@ -100,22 +103,25 @@ function OpenStreetMap({ style }: { style?: StyleProp<ViewStyle> }) {
     webViewRef.current?.injectJavaScript(`window.setHazards(${JSON.stringify(json)}); true;`);
   }, []);
 
-  useEffect(() => {
-    if (mapReady.current) drawHazards(reports);
-  }, [drawHazards, reports]);
-
   const [fromText, setFromText] = useState('');
   const [toText, setToText] = useState('');
+  const [searchText, setSearchText] = useState('');
+  const [filter, setFilter] = useState<MapFilterKey>('all');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [confirmedIds, setConfirmedIds] = useState<string[]>([]);
   // Coordinates locked in when a suggestion is chosen (skips re-geocoding).
   const [fromCoord, setFromCoord] = useState<Coordinate | null>(null);
   const [toCoord, setToCoord] = useState<Coordinate | null>(null);
-  const [activeField, setActiveField] = useState<FieldKey | null>(null);
+  const [activeField, setActiveField] = useState<FieldKey | 'search' | null>(null);
   const [routing, setRouting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Drive (turn-by-turn) mode.
   const [route, setRoute] = useState<Route | null>(null);
   const [driving, setDriving] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [driveFix, setDriveFix] = useState<Coordinate | null>(null);
   const [nav, setNav] = useState<NavInfo | null>(null);
   const watchRef = useRef<Location.LocationSubscription | null>(null);
   const magnetometerRef = useRef<{ remove: () => void } | null>(null);
@@ -124,8 +130,36 @@ function OpenStreetMap({ style }: { style?: StyleProp<ViewStyle> }) {
   // Compass heading (degrees, 0 = north) from the magnetometer.
   const headingRef = useRef<number | null>(null);
 
-  const query = activeField === 'from' ? fromText : activeField === 'to' ? toText : '';
+  const query =
+    activeField === 'from' ? fromText : activeField === 'to' ? toText : activeField === 'search' ? searchText : '';
   const { suggestions, loading: loadingSuggestions } = usePlaceSuggestions(query, activeField !== null);
+
+  const visibleReports = useMemo(
+    () => reports.filter((report) => reportMatchesFilter(report.type, filter)),
+    [filter, reports],
+  );
+  const selectedReport = visibleReports.find((report) => report.id === selectedId) ?? null;
+  const situation = useActivityHazards(driving, muted, 'drive', driveFix ?? location, reports);
+  const locateVisible = Boolean(location && !driving && !route && !selectedReport);
+  const hasBottomCard = Boolean(
+    (route && !driving && !selectedReport) || (driving && nav) || (selectedReport && !driving),
+  );
+  const fabBottom = locateVisible ? clearance + 76 : hasBottomCard ? clearance + 88 : clearance + 16;
+
+  useEffect(() => {
+    const back = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (chatOpen) {
+        setChatOpen(false);
+        return true;
+      }
+      return false;
+    });
+    return () => back.remove();
+  }, [chatOpen]);
+
+  useEffect(() => {
+    if (mapReady.current) drawHazards(visibleReports);
+  }, [drawHazards, visibleReports]);
 
   const placeMarker = useCallback((fix: PreciseLocation) => {
     const script = `window.setUserLocation(${fix.latitude}, ${fix.longitude}, ${fix.accuracy}); true;`;
@@ -138,6 +172,18 @@ function OpenStreetMap({ style }: { style?: StyleProp<ViewStyle> }) {
       placeMarker(location);
     }
   }, [location, placeMarker]);
+
+  const flyTo = useCallback((latitude: number, longitude: number) => {
+    webViewRef.current?.injectJavaScript(
+      `window.flyTo && window.flyTo(${latitude}, ${longitude}); true;`,
+    );
+  }, []);
+
+  useEffect(() => {
+    if (!location || fromText || fromCoord) return;
+    setFromText('My location');
+    setFromCoord({ latitude: location.latitude, longitude: location.longitude });
+  }, [fromCoord, fromText, location]);
 
   const recenterOnUser = () => {
     pressHaptic();
@@ -177,6 +223,7 @@ function OpenStreetMap({ style }: { style?: StyleProp<ViewStyle> }) {
     stopCompass();
     setDriving(false);
     setNav(null);
+    void stopSpeech();
     webViewRef.current?.injectJavaScript('window.endDrive && window.endDrive(); true;');
   }, []);
 
@@ -261,6 +308,10 @@ function OpenStreetMap({ style }: { style?: StyleProp<ViewStyle> }) {
     Keyboard.dismiss();
     stepIndexRef.current = 1;
     setDriving(true);
+    if (location) setDriveFix(location);
+    if (!muted) {
+      speakText('Starting drive. I will warn you about nearby hazards.');
+    }
 
     void startCompass();
     if (location) updateDrive(location);
@@ -272,13 +323,17 @@ function OpenStreetMap({ style }: { style?: StyleProp<ViewStyle> }) {
         timeInterval: 1000,
       },
       (loc) => {
-        updateDrive(
-          { latitude: loc.coords.latitude, longitude: loc.coords.longitude },
-          loc.coords.heading,
-        );
+        const next = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+        setDriveFix(next);
+        updateDrive(next, loc.coords.heading);
       },
     );
   };
+
+  useEffect(() => {
+    if (!driving || muted || !nav?.instruction) return;
+    speakText(nav.instruction);
+  }, [driving, muted, nav?.instruction]);
 
   // Stop watching location and the compass if the map unmounts mid-drive.
   useEffect(() => {
@@ -287,6 +342,7 @@ function OpenStreetMap({ style }: { style?: StyleProp<ViewStyle> }) {
       watchRef.current = null;
       magnetometerRef.current?.remove();
       magnetometerRef.current = null;
+      void stopSpeech();
     };
   }, []);
 
@@ -300,13 +356,18 @@ function OpenStreetMap({ style }: { style?: StyleProp<ViewStyle> }) {
     }
   };
 
-  const handleSelect = (field: FieldKey, place: Place) => {
+  const handleSelect = (field: FieldKey | 'search', place: Place) => {
     if (field === 'from') {
       setFromText(place.label);
       setFromCoord({ latitude: place.latitude, longitude: place.longitude });
-    } else {
+    } else if (field === 'to') {
       setToText(place.label);
       setToCoord({ latitude: place.latitude, longitude: place.longitude });
+    } else {
+      setSearchText(place.label);
+      setToText(place.label);
+      setToCoord({ latitude: place.latitude, longitude: place.longitude });
+      flyTo(place.latitude, place.longitude);
     }
     setActiveField(null);
     Keyboard.dismiss();
@@ -353,114 +414,70 @@ function OpenStreetMap({ style }: { style?: StyleProp<ViewStyle> }) {
     }
   };
 
-  const showSuggestions = activeField !== null && (loadingSuggestions || suggestions.length > 0);
-
   return (
     <View style={[styles.container, style]}>
       <WebView
         ref={webViewRef}
         style={styles.webview}
         originWhitelist={['*']}
-        source={{ html: buildMapHtml() }}
+        source={{ html: MAP_HTML, baseUrl: 'https://unpkg.com/' }}
         javaScriptEnabled
         domStorageEnabled
-        startInLoadingState
-        androidLayerType="hardware"
+        androidLayerType="none"
         onLoadEnd={() => {
           mapReady.current = true;
-          drawHazards(reports);
+          drawHazards(visibleReports);
           if (location) placeMarker(location);
+        }}
+        onMessage={(event) => {
+          try {
+            const payload = JSON.parse(event.nativeEvent.data) as { type?: string; id?: string };
+            if (payload.type === 'hazard' && payload.id) {
+              setSelectedId(payload.id);
+              setActiveField(null);
+              Keyboard.dismiss();
+              const match = reports.find((report) => report.id === payload.id);
+              if (match) flyTo(match.latitude, match.longitude);
+            }
+          } catch {
+            // Ignore malformed map messages.
+          }
         }}
       />
 
-      {/* Directions panel */}
       {!driving ? (
-      <View style={[styles.panel, { top: insets.top + 12 }]}>
-        <View style={styles.field}>
-          <Ionicons name="ellipse" size={12} color={Brand.green} style={styles.fieldIcon} />
-          <TextInput
-            value={fromText}
-            onChangeText={(t) => handleChange('from', t)}
-            onFocus={() => setActiveField('from')}
-            placeholder="My location"
-            placeholderTextColor={C.textSecondary}
-            style={styles.input}
-            returnKeyType="next"
-          />
-          {location ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Use current location"
-              onPress={useCurrentAsFrom}
-              hitSlop={8}
-              style={({ pressed }) => [styles.fromLocate, pressed && styles.fromLocatePressed]}>
-              <Ionicons name="locate" size={18} color={Brand.green} />
-            </Pressable>
-          ) : null}
-        </View>
-        <View style={styles.divider} />
-        <View style={styles.field}>
-          <Ionicons name="location" size={14} color="#E5484D" style={styles.fieldIcon} />
-          <TextInput
-            value={toText}
-            onChangeText={(t) => handleChange('to', t)}
-            onFocus={() => setActiveField('to')}
-            placeholder="Choose destination"
-            placeholderTextColor={C.textSecondary}
-            style={styles.input}
-            returnKeyType="go"
-            onSubmitEditing={handleDirections}
-          />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Get directions"
-            onPress={handleDirections}
-            disabled={routing}
-            style={({ pressed }) => [styles.goButton, pressed && styles.goButtonPressed]}>
-            {routing ? (
-              <ActivityIndicator size="small" color={Brand.white} />
-            ) : (
-              <Ionicons name="navigate" size={18} color={Brand.white} />
-            )}
-          </Pressable>
-        </View>
-
-        {showSuggestions ? (
-          <View style={styles.suggestions}>
-            {loadingSuggestions && suggestions.length === 0 ? (
-              <View style={styles.suggestionLoading}>
-                <ActivityIndicator size="small" color={C.textSecondary} />
-              </View>
-            ) : (
-              <ScrollView keyboardShouldPersistTaps="handled" style={styles.suggestionScroll}>
-                {suggestions.map((place, index) => (
-                  <Pressable
-                    key={`${place.latitude},${place.longitude},${index}`}
-                    onPress={() => handleSelect(activeField ?? 'to', place)}
-                    style={({ pressed }) => [
-                      styles.suggestionRow,
-                      pressed && styles.suggestionRowPressed,
-                    ]}>
-                    <Ionicons
-                      name="location-outline"
-                      size={16}
-                      color={C.textSecondary}
-                      style={styles.suggestionIcon}
-                    />
-                    <Text numberOfLines={2} style={styles.suggestionText}>
-                      {place.label}
-                    </Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            )}
-          </View>
-        ) : null}
-
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-      </View>
+        <MapChrome
+          top={insets.top + 8}
+          fromText={fromText}
+          toText={toText}
+          searchText={searchText}
+          filter={filter}
+          routing={routing}
+          error={error}
+          suggestions={suggestions}
+          loadingSuggestions={loadingSuggestions}
+          suggestionField={activeField}
+          onSearchChange={(text) => {
+            setSearchText(text);
+            setActiveField('search');
+          }}
+          onSearchFocus={() => setActiveField('search')}
+          onFromChange={(text) => handleChange('from', text)}
+          onToChange={(text) => handleChange('to', text)}
+          onFromFocus={() => setActiveField('from')}
+          onToFocus={() => setActiveField('to')}
+          onUseMyLocation={useCurrentAsFrom}
+          onRecenter={recenterOnUser}
+          onDirections={handleDirections}
+          onFilter={(key) => {
+            setFilter(key);
+            setSelectedId(null);
+          }}
+          onSelectPlace={(place) => handleSelect(activeField ?? 'search', place)}
+        />
       ) : null}
 
+      <View style={styles.uiLayer} pointerEvents="box-none" collapsable={false}>
       {/* Drive-mode top banner: next maneuver */}
       {driving && nav ? (
         <View style={[styles.navBanner, { top: insets.top + 12 }]}>
@@ -472,12 +489,25 @@ function OpenStreetMap({ style }: { style?: StyleProp<ViewStyle> }) {
             <Text numberOfLines={2} style={styles.navInstruction}>
               {nav.instruction}
             </Text>
+            {situation.level !== 'clear' ? (
+              <Text numberOfLines={1} style={styles.navHazard}>
+                {situation.title}
+                {situation.meters != null ? ` · ${Math.round(situation.meters)} m` : ''}
+              </Text>
+            ) : null}
           </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={muted ? 'Unmute voice alerts' : 'Mute voice alerts'}
+            onPress={() => setMuted((value) => !value)}
+            style={styles.navMute}>
+            <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={20} color={Brand.white} />
+          </Pressable>
         </View>
       ) : null}
 
       {/* Route summary with Start drive button */}
-      {route && !driving ? (
+      {route && !driving && !selectedReport ? (
         <View style={[styles.routeCard, { bottom: clearance + 16 }]}>
           <View style={styles.routeInfo}>
             <Text style={styles.routeEta}>{formatDuration(route.duration)}</Text>
@@ -519,7 +549,27 @@ function OpenStreetMap({ style }: { style?: StyleProp<ViewStyle> }) {
         </View>
       ) : null}
 
-      {location && !driving && !route ? (
+      {selectedReport && !driving ? (
+        <MapReportSheet
+          report={selectedReport}
+          distanceLabel={
+            location
+              ? `${formatDistance(distanceMeters(location, selectedReport))} away`
+              : undefined
+          }
+          bottom={clearance + 16}
+          onClose={() => setSelectedId(null)}
+          onView={() => flyTo(selectedReport.latitude, selectedReport.longitude)}
+          onConfirm={() => {
+            setConfirmedIds((ids) =>
+              ids.includes(selectedReport.id) ? ids : [...ids, selectedReport.id],
+            );
+          }}
+          confirmed={confirmedIds.includes(selectedReport.id)}
+        />
+      ) : null}
+
+      {location && !driving && !route && !selectedReport ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Center on my location"
@@ -532,6 +582,14 @@ function OpenStreetMap({ style }: { style?: StyleProp<ViewStyle> }) {
           <Ionicons name="locate" size={22} color={Brand.green} />
         </Pressable>
       ) : null}
+      </View>
+
+      <ActivityDallyChat
+        open={chatOpen}
+        onOpenChange={setChatOpen}
+        location={driveFix ?? location}
+        fabBottom={fabBottom}
+      />
     </View>
   );
 }
@@ -714,11 +772,23 @@ function buildMapHtml() {
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
       html, body, #map { margin: 0; padding: 0; height: 100%; width: 100%; background: #DCEBF2; }
+      .leaflet-div-icon {
+        background: transparent !important;
+        border: none !important;
+      }
       .hazard-pin {
-        width: 26px; height: 26px; border-radius: 13px;
+        width: 26px; height: 26px; border-radius: 50%;
         border: 2px solid #ffffff; box-shadow: 0 1px 4px rgba(0,0,0,0.3);
         display: flex; align-items: center; justify-content: center;
         color: #ffffff; font: 700 13px -apple-system, sans-serif;
+      }
+      .risk-pin {
+        width: 28px; height: 28px; border-radius: 50%;
+        background: #ffffff;
+        border: 2.5px solid #FF3B30;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+        display: flex; align-items: center; justify-content: center;
+        font: 700 14px -apple-system, sans-serif;
       }
       .hazard-popup { font: 400 13px -apple-system, sans-serif; min-width: 150px; }
       .hazard-popup b { display: block; margin-bottom: 2px; font-size: 14px; }
@@ -735,13 +805,29 @@ function buildMapHtml() {
         background: #015144; border: 3px solid #ffffff;
         box-shadow: 0 1px 3px rgba(0,0,0,0.4);
       }
+      .user-loc { width: 48px; height: 48px; position: relative; }
+      .user-loc-pulse {
+        position: absolute; inset: 0; border-radius: 24px;
+        background: rgba(26, 115, 232, 0.28);
+        animation: user-pulse 2s ease-out infinite;
+      }
+      .user-loc-dot {
+        position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+        width: 18px; height: 18px; border-radius: 9px;
+        background: #1A73E8; border: 3px solid #ffffff;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
+      }
+      @keyframes user-pulse {
+        0% { transform: scale(0.4); opacity: 0.65; }
+        100% { transform: scale(1); opacity: 0; }
+      }
     </style>
   </head>
   <body>
     <div id="map"></div>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-      var map = L.map('map', { zoomControl: true, attributionControl: true })
+      var map = L.map('map', { zoomControl: false, attributionControl: true })
         .setView([${CAMERA.latitude}, ${CAMERA.longitude}], ${CAMERA.zoom});
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -751,6 +837,12 @@ function buildMapHtml() {
 
       var userMarker = null;
       var userCircle = null;
+      var userIcon = L.divIcon({
+        className: '',
+        html: '<div class="user-loc"><div class="user-loc-pulse"></div><div class="user-loc-dot"></div></div>',
+        iconSize: [48, 48],
+        iconAnchor: [24, 24],
+      });
       var routeLine = null;
       var fromMarker = null;
       var toMarker = null;
@@ -766,32 +858,55 @@ function buildMapHtml() {
       window.setHazards = function (json) {
         hazardLayer.clearLayers();
         JSON.parse(json).forEach(function (h) {
+          if (!isFinite(h.latitude) || !isFinite(h.longitude)) return;
+          var color = h.color || '#FF9500';
+          if (h.zoneM) {
+            L.circle([h.latitude, h.longitude], {
+              radius: h.zoneM * 1.25, color: color, weight: 0,
+              fillColor: color, fillOpacity: 0.07
+            }).addTo(hazardLayer);
+            L.circle([h.latitude, h.longitude], {
+              radius: h.zoneM, color: color, weight: 0,
+              fillColor: color, fillOpacity: 0.14
+            }).addTo(hazardLayer);
+          }
           var icon = L.divIcon({
             className: '',
-            html: '<div class="hazard-pin" style="background:' + h.color + '">!</div>',
-            iconSize: [26, 26],
-            iconAnchor: [13, 13],
+            html: '<div class="risk-pin" style="border-color:' + color + ';color:' + color + '">!</div>',
+            iconSize: [28, 28],
+            iconAnchor: [14, 14],
             popupAnchor: [0, -14],
           });
-          L.marker([h.latitude, h.longitude], { icon: icon })
-            .bindPopup(
-              '<div class="hazard-popup">' +
-                '<span class="hazard-tag" style="color:' + h.color + '">' + escapeHtml(h.label) + '</span>' +
-                '<b>' + escapeHtml(h.title) + '</b>' +
-                escapeHtml(h.description) +
-              '</div>'
-            )
+          L.marker([h.latitude, h.longitude], { icon: icon, zIndexOffset: 400 })
+            .on('click', function () {
+              if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'hazard', id: h.id }));
+              }
+            })
             .addTo(hazardLayer);
         });
+      };
+
+      window.flyTo = function (lat, lng) {
+        map.setView([lat, lng], 17, { animate: true });
       };
 
       // Called from React Native with the device's precise GPS fix.
       window.setUserLocation = function (lat, lng, accuracy) {
         var latlng = L.latLng(lat, lng);
+        var radius = Math.max(accuracy || 0, 18);
+        if (userCircle) { userCircle.setLatLng(latlng).setRadius(radius); }
+        else {
+          userCircle = L.circle(latlng, {
+            radius: radius,
+            color: '#1A73E8',
+            weight: 1,
+            fillColor: '#1A73E8',
+            fillOpacity: 0.16
+          }).addTo(map);
+        }
         if (userMarker) { userMarker.setLatLng(latlng); }
-        else { userMarker = L.circleMarker(latlng, { radius: 7, color: '#ffffff', weight: 2, fillColor: '#015144', fillOpacity: 1 }).addTo(map); }
-        if (userCircle) { userCircle.setLatLng(latlng).setRadius(accuracy); }
-        else { userCircle = L.circle(latlng, { radius: accuracy, color: '#015144', weight: 1, fillOpacity: 0.12 }).addTo(map); }
+        else { userMarker = L.marker(latlng, { icon: userIcon, zIndexOffset: 600 }).addTo(map); }
         if (!routeLine) { map.setView(latlng, 16); }
       };
 
@@ -865,6 +980,8 @@ function buildMapHtml() {
 </html>`;
 }
 
+const MAP_HTML = buildMapHtml();
+
 /** Requests the precise (foreground) location and returns the current GPS fix. */
 function usePreciseLocation() {
   const [location, setLocation] = useState<PreciseLocation | null>(null);
@@ -904,7 +1021,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   webview: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#DCEBF2',
+    opacity: 0.99,
+  },
+  uiLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 10,
+    elevation: 10,
   },
   panel: {
     position: 'absolute',
@@ -1042,6 +1166,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: 'rgba(255, 255, 255, 0.9)',
     marginTop: 1,
+  },
+  navHazard: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FDE68A',
+    marginTop: 4,
+  },
+  navMute: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   routeCard: {
     position: 'absolute',

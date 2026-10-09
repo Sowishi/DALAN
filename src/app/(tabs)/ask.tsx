@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import * as Location from 'expo-location';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -12,19 +13,24 @@ import {
   View,
 } from 'react-native';
 
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { DallyWelcome } from '@/components/dally-welcome';
 import { Pressable } from '@/components/haptic-pressable';
 import { LocationPicker, type PinnedLocation } from '@/components/location-picker';
 import { HAZARD_META } from '@/constants/hazards';
 import { Brand, Colors, Spacing } from '@/constants/theme';
+import { useAssistant } from '@/context/assistant-provider';
 import { useFloatingTabClearance } from '@/hooks/use-floating-tab-clearance';
-import { useLocalAssistant } from '@/hooks/use-local-assistant';
+import { useSpeakReplies } from '@/hooks/use-speak-replies';
 
 const C = Colors.light;
 const MAX_MESSAGE = 400;
+const HEADER_BLOCK = 70;
+const LANDSCAPE_BELOW_HEADER = 100;
 
 export default function AskScreen() {
+  const insets = useSafeAreaInsets();
   const tabClearance = useFloatingTabClearance();
   const {
     status,
@@ -38,7 +44,8 @@ export default function AskScreen() {
     confirmPin,
     cancelPending,
     retry,
-  } = useLocalAssistant();
+  } = useAssistant();
+  const { stop: stopSpeaking, muted, setMuted } = useSpeakReplies(messages, isGenerating);
   const [draft, setDraft] = useState('');
   const [pin, setPin] = useState<PinnedLocation | null>(null);
   const [focusNonce, setFocusNonce] = useState(0);
@@ -81,20 +88,55 @@ export default function AskScreen() {
 
   const ready = status === 'ready';
   const canSend = ready && !isGenerating && draft.trim().length > 0;
+  const chatting = messages.length > 0;
+  const showWelcomeArt = ready && !chatting && !pickerOpen;
+  const backdropHeight = insets.top + HEADER_BLOCK + LANDSCAPE_BELOW_HEADER;
 
   const handleSend = () => {
     if (!canSend) return;
     const text = draft.trim();
     setDraft('');
+    stopSpeaking();
     void send(text);
+  };
+
+  const handleSuggest = (prompt: string) => {
+    if (!ready || isGenerating) return;
+    setDraft('');
+    stopSpeaking();
+    void send(prompt);
   };
 
   return (
     <View style={styles.container}>
+      {showWelcomeArt ? (
+        <Image
+          source={require('@/assets/images/dally_background.jpg')}
+          style={[styles.backdrop, { height: backdropHeight }]}
+          contentFit="cover"
+          contentPosition="center"
+          accessibilityIgnoresInvertColors
+        />
+      ) : null}
       <SafeAreaView edges={['top']} style={styles.flex}>
           <View style={styles.header}>
-            <Text style={styles.headerTitle}>Dally</Text>
-            <Text style={styles.headerSubtitle}>Your helper for road hindrances</Text>
+            <View style={styles.headerCopy}>
+              <Text style={styles.headerTitle}>Dally</Text>
+              <Text style={styles.headerSubtitle}>Your helper for road hindrances</Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={muted ? 'Unmute Dally' : 'Mute Dally'}
+              accessibilityState={{ selected: muted }}
+              onPress={() => setMuted(!muted)}
+              hitSlop={8}
+              style={({ pressed }) => [styles.mute, pressed && styles.pressed]}>
+              <Ionicons
+                name={muted ? 'volume-mute' : 'volume-high'}
+                size={22}
+                color={muted ? C.textSecondary : Brand.green}
+              />
+            </Pressable>
           </View>
 
           {status === 'downloading' || status === 'loading' ? (
@@ -116,14 +158,18 @@ export default function AskScreen() {
               contentContainerStyle={styles.thread}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode="interactive"
-              onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}>
+              showsVerticalScrollIndicator={false}
+              onContentSizeChange={() => {
+                if (messages.length > 0) {
+                  scrollRef.current?.scrollToEnd({ animated: true });
+                }
+              }}>
               {messages.length === 0 ? (
-                <View style={styles.empty}>
-                  <Text style={styles.emptyTitle}>Hi, I&apos;m Dally</Text>
-                  <Text style={styles.emptyBody}>
-                    Try “Any flooding nearby?” or “Report debris on the sidewalk.”
-                  </Text>
-                </View>
+                <DallyWelcome
+                  disabled={!ready || isGenerating}
+                  landscapeHeight={LANDSCAPE_BELOW_HEADER}
+                  onSuggest={handleSuggest}
+                />
               ) : (
                 messages.map((message) => (
                   <View
@@ -168,25 +214,28 @@ export default function AskScreen() {
 
           {pickerOpen ? null : (
           <View style={[styles.composer, { paddingBottom: composerBottom }]}>
-            <TextInput
-              value={draft}
-              onChangeText={setDraft}
-              placeholder={ready ? 'Ask Dally…' : 'Dally is not ready yet'}
-              placeholderTextColor={C.textSecondary}
-              editable={ready && !isGenerating}
-              multiline
-              maxLength={MAX_MESSAGE}
-              returnKeyType="send"
-              onSubmitEditing={handleSend}
-              blurOnSubmit
-              accessibilityLabel="Message"
-              onFocus={() => {
-                requestAnimationFrame(() => {
-                  scrollRef.current?.scrollToEnd({ animated: true });
-                });
-              }}
-              style={styles.input}
-            />
+            <View style={styles.inputShell}>
+              <View style={styles.sparkle} accessibilityElementsHidden />
+              <TextInput
+                value={draft}
+                onChangeText={setDraft}
+                placeholder={ready ? 'Ask Dally…' : 'Dally is not ready yet'}
+                placeholderTextColor={C.textSecondary}
+                editable={ready && !isGenerating}
+                multiline
+                maxLength={MAX_MESSAGE}
+                returnKeyType="send"
+                onSubmitEditing={handleSend}
+                blurOnSubmit
+                accessibilityLabel="Message"
+                onFocus={() => {
+                  requestAnimationFrame(() => {
+                    scrollRef.current?.scrollToEnd({ animated: true });
+                  });
+                }}
+                style={styles.input}
+              />
+            </View>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Send message"
@@ -253,15 +302,33 @@ function ErrorPanel({ message, onRetry }: { message: string; onRetry: () => void
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.background },
-  flex: { flex: 1 },
+  backdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+  },
+  flex: { flex: 1, backgroundColor: 'transparent' },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: Spacing.three,
     paddingTop: Spacing.two,
-    paddingBottom: Spacing.three,
-    gap: Spacing.half,
+    paddingBottom: Spacing.one,
+    gap: Spacing.two,
+    backgroundColor: 'transparent',
   },
-  headerTitle: { fontSize: 32, fontWeight: '700', color: C.text, letterSpacing: -0.5 },
-  headerSubtitle: { fontSize: 15, color: C.textSecondary },
+  headerCopy: { flex: 1, gap: 4 },
+  mute: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.9)',
+  },
+  headerTitle: { fontSize: 34, fontWeight: '700', color: C.text, letterSpacing: -0.8 },
+  headerSubtitle: { fontSize: 16, color: C.textSecondary },
   threadShrink: {
     flexGrow: 0,
     flexShrink: 1,
@@ -273,54 +340,65 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.three,
     gap: Spacing.two,
   },
-  empty: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingHorizontal: Spacing.two,
-    gap: Spacing.two,
-  },
-  emptyTitle: { fontSize: 22, fontWeight: '600', color: C.text, letterSpacing: -0.3 },
-  emptyBody: { fontSize: 15, lineHeight: 21, color: C.textSecondary },
   bubble: {
     maxWidth: '84%',
-    borderRadius: Spacing.three,
     paddingHorizontal: Spacing.three,
     paddingVertical: 10,
   },
   bubbleUser: {
     alignSelf: 'flex-end',
     backgroundColor: Brand.green,
+    borderRadius: 20,
+    borderBottomRightRadius: 6,
   },
   bubbleAssistant: {
     alignSelf: 'flex-start',
     backgroundColor: C.backgroundElement,
+    borderRadius: 20,
+    borderBottomLeftRadius: 6,
   },
   bubbleUserText: { fontSize: 16, lineHeight: 22, color: Brand.white },
   bubbleAssistantText: { fontSize: 16, lineHeight: 22, color: C.text },
   composer: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: Spacing.two,
+    alignItems: 'center',
+    gap: 10,
     paddingHorizontal: Spacing.three,
     paddingTop: Spacing.two,
     paddingBottom: Spacing.two,
   },
+  inputShell: {
+    flex: 1,
+    minHeight: 52,
+    maxHeight: 120,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: 26,
+    paddingLeft: 18,
+    paddingRight: 12,
+    paddingVertical: 4,
+    backgroundColor: '#F4F6F5',
+  },
+  sparkle: {
+    width: 8,
+    height: 8,
+    backgroundColor: '#8EBFB3',
+    transform: [{ rotate: '45deg' }],
+  },
   input: {
     flex: 1,
     minHeight: 44,
-    maxHeight: 120,
-    borderRadius: Spacing.three,
-    paddingHorizontal: Spacing.three,
+    maxHeight: 112,
     paddingVertical: 10,
     fontSize: 16,
     lineHeight: 22,
     color: C.text,
-    backgroundColor: C.backgroundElement,
   },
   send: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Brand.green,
