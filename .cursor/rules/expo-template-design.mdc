@@ -10,12 +10,21 @@ Match the **default Expo Router starter** look and feel in this repo. Reuse exis
 
 ## Theme & colors
 
-- Import tokens from `@/constants/theme`: `Colors`, `Spacing`, `Fonts`, `MaxContentWidth`, `BottomTabInset`.
-- Read colors via `useTheme()` or `ThemedView` / `ThemedText` — **no ad-hoc hex** except template accents already in the codebase:
-  - Expo blue gradient: `#3C9FFE` → `#0274DF` (icon background, splash)
-  - Splash overlay: `#208AEF`
-  - Link / primary accent: `#3c87f7` (`ThemedText` type `linkPrimary`)
-- Surfaces: `background` (screen) → `backgroundElement` (cards, grouped sections) → `backgroundSelected` (subtle emphasis, input borders).
+- Import tokens from `@/constants/theme`: `Colors`, `Brand`, `Spacing`, `Fonts`, `MaxContentWidth`, `BottomTabInset`.
+- Read neutral colors via `useTheme()` or `ThemedView` / `ThemedText`. For brand color, use the **`Brand`** token — **no ad-hoc hex**.
+
+### DALAN brand palette (`Brand` in `theme.ts`)
+
+| Token          | Hex       | Use |
+|----------------|-----------|-----|
+| `Brand.green`  | `#015144` | Primary: CTAs, links (`linkPrimary`), key icons/surfaces |
+| `Brand.white`  | `#ffffff` | Text/icons placed on green |
+| `Brand.yellow` | `#FEBE3C` | Accent only — small highlights, active indicators, accent bars. Use sparingly; never as body-text color on white (fails contrast) |
+
+- **Primary CTA:** `Brand.green` background with `Brand.white` label.
+- **Links:** `ThemedText type="linkPrimary"` (now `Brand.green`).
+- **Accent:** reach for `Brand.yellow` for one small emphasis per view (e.g., a 3px accent bar), not large fills.
+- Neutral surfaces still use theme scale: `background` → `backgroundElement` (cards) → `backgroundSelected` (input borders, subtle emphasis).
 
 ## Typography
 
@@ -48,7 +57,8 @@ Follow **`@/components/animated-icon`** — do not replace with generic spring p
 ## New screens (e.g. auth)
 
 - Hero: optional **`AnimatedIcon`** + **`type="title"`** headline.
-- Forms: fields inside a **`backgroundElement`** card; inputs on `background` with `backgroundSelected` hairline border; CTA uses template blue `#3c87f7`.
+- Forms: fields inside a **`backgroundElement`** card; inputs on `background` with `backgroundSelected` hairline border; CTA uses **`Brand.green`** with **`Brand.white`** label.
 - Links: **`type="linkPrimary"`**, not custom underline styles.
+- Add at most one **`Brand.yellow`** accent per screen for emphasis.
 
-When extending the design system, add tokens to `src/constants/theme.ts` or `global.css` — keep one source of truth.
+When extending the design system, add tokens to `src/constants/theme.ts` (e.g., `Brand`) or `global.css` — keep one source of truth.

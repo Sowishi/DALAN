@@ -26,6 +26,18 @@ export const Colors = {
 
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
 
+/**
+ * DALAN brand palette.
+ * - `green`: primary surfaces, CTAs, links
+ * - `white`: on-brand text/icons over green
+ * - `yellow`: accent/highlights, used sparingly
+ */
+export const Brand = {
+  green: '#015144',
+  white: '#ffffff',
+  yellow: '#FEBE3C',
+} as const;
+
 export const Fonts = Platform.select({
   ios: {
     /** iOS `UIFontDescriptorSystemDesignDefault` */
