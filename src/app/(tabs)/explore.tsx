@@ -1,17 +1,10 @@
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useState } from 'react';
-import {
-  type DimensionValue,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { CityMap } from '@/components/city-map';
 import { Brand, Colors, Spacing } from '@/constants/theme';
 
 const C = Colors.light;
@@ -23,22 +16,6 @@ const FILTERS: Filter[] = [
   { key: 'roads', label: 'Roads', icon: 'car' },
   { key: 'safety', label: 'Safety', icon: 'shield-checkmark' },
   { key: 'lifestyle', label: 'Lifestyle', icon: 'leaf' },
-];
-
-type Pin = {
-  key: string;
-  label: string;
-  color: string;
-  top: DimensionValue;
-  left: DimensionValue;
-  icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
-};
-
-const PINS: Pin[] = [
-  { key: 'baguio', label: 'Baguio City', color: Brand.green, top: '14%', left: '18%', icon: 'image' },
-  { key: 'quezon', label: 'Quezon City', color: Brand.yellow, top: '30%', left: '46%', icon: 'alert' },
-  { key: 'cebu', label: 'Cebu City', color: Brand.green, top: '55%', left: '60%', icon: 'map-marker' },
-  { key: 'davao', label: 'Davao City', color: '#E5484D', top: '74%', left: '72%', icon: 'alert-octagon' },
 ];
 
 export default function ExploreScreen() {
@@ -109,24 +86,9 @@ export default function ExploreScreen() {
         </ScrollView>
       </SafeAreaView>
 
-      {/* Map placeholder */}
+      {/* Map */}
       <View style={styles.map}>
-        {PINS.map((p) => (
-          <View key={p.key} style={[styles.pin, { top: p.top, left: p.left }]}>
-            <MaterialCommunityIcons name="map-marker" size={36} color={p.color} />
-            <View style={styles.pinLabel}>
-              <Text style={styles.pinLabelText}>{p.label}</Text>
-            </View>
-          </View>
-        ))}
-
-        {/* Current location */}
-        <View style={[styles.pin, { top: '42%', left: '38%' }]}>
-          <View style={styles.currentLocation} />
-          <View style={styles.pinLabel}>
-            <Text style={styles.pinLabelText}>Manila</Text>
-          </View>
-        </View>
+        <CityMap style={StyleSheet.absoluteFill} />
 
         {/* Report card */}
         <View style={styles.card}>
@@ -279,30 +241,6 @@ const styles = StyleSheet.create({
   map: {
     flex: 1,
     backgroundColor: '#DCEBF2',
-  },
-  pin: {
-    position: 'absolute',
-    alignItems: 'center',
-  },
-  pinLabel: {
-    marginTop: -6,
-    paddingHorizontal: Spacing.one,
-    paddingVertical: 1,
-    borderRadius: Spacing.half,
-    backgroundColor: C.background,
-  },
-  pinLabelText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: C.text,
-  },
-  currentLocation: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: '#2D7FF9',
-    borderWidth: 3,
-    borderColor: C.background,
   },
   card: {
     position: 'absolute',
