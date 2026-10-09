@@ -54,6 +54,15 @@ export default function TabsLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="ask"
+        options={{
+          title: 'Ask',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="chatbubble-ellipses" size={size} color={color} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }

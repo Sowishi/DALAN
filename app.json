@@ -46,6 +46,14 @@
           "requestLocationPermission": true,
           "locationPermission": "Allow DALAN to use your location to show nearby reports"
         }
+      ],
+      [
+        "llama.rn",
+        {
+          "enableEntitlements": true,
+          "forceCxx20": true,
+          "enableOpenCL": true
+        }
       ]
     ],
     "experiments": {
