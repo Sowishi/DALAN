@@ -1,0 +1,269 @@
+---
+
+description: Apple-inspired design system and UI/UX implementation standards
+alwaysApply: true
+-----------------
+
+# Apple-Inspired UI/UX Design Rules
+
+## 1. Core Design Philosophy
+
+Design every interface using Apple's Human Interface Guidelines (HIG) as the primary reference.
+
+The goal is to create an interface that feels:
+
+* Minimal, elegant, premium, and intentional.
+* Clean, intuitive, and easy to navigate.
+* Consistent across every screen and component.
+* Responsive, accessible, and delightful to use.
+* Native to the platform instead of looking like a generic web template.
+
+Prioritize clarity, deference, and depth.
+
+Do not blindly copy Apple's proprietary interfaces, logos, or branding. Apply Apple's design principles to the project's own identity.
+
+## 2. Visual Design
+
+### Layout
+
+* Use generous whitespace and consistent spacing.
+* Establish a clear visual hierarchy.
+* Avoid unnecessary borders, dividers, cards, and decorative elements.
+* Prefer simple layouts over excessive nesting.
+* Align elements precisely using a consistent spacing system.
+* Keep primary actions obvious and secondary actions visually quiet.
+* Avoid overcrowded screens and unnecessary information.
+
+### Typography
+
+* Use the system font stack whenever appropriate:
+
+  * Web: `-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", sans-serif`
+  * iOS: SF Pro through native system typography.
+* Use a clear type scale for large titles, section headings, body text, captions, and metadata.
+* Use font weights intentionally; do not make every heading bold.
+* Prefer readable text sizes and comfortable line heights.
+* Use sentence case for most interface labels.
+* Avoid excessive uppercase text, decorative fonts, and oversized text without purpose.
+* Use Dynamic Type or scalable typography where supported.
+
+### Colors
+
+* Prefer neutral backgrounds, strong readable text, and restrained accent colors.
+* Use semantic colors for success, warning, error, and informational states.
+* Support light and dark appearances when the platform and project require them.
+* Maintain sufficient contrast for accessibility.
+* Avoid excessive gradients, neon colors, and unnecessary shadows.
+* Use color to communicate meaning rather than decoration.
+* Respect the existing product brand palette unless explicitly instructed otherwise.
+
+### Surfaces and Materials
+
+* Prefer clean backgrounds and subtle surface differentiation.
+* Use rounded corners consistently and purposefully.
+* Use thin separators only when they improve readability.
+* Apply blur and translucent materials sparingly, primarily for overlays, navigation, or floating controls where appropriate.
+* Avoid excessive glassmorphism, heavy drop shadows, and deeply nested cards.
+* Do not wrap every piece of content in its own card.
+
+## 3. Components
+
+Implement reusable, consistent components for:
+
+* Buttons and action controls.
+* Text fields and forms.
+* Navigation bars and tab bars.
+* Lists and grouped settings.
+* Dialogs, sheets, popovers, and menus.
+* Search interfaces.
+* Loading, empty, error, and success states.
+* Cards and data presentation where genuinely useful.
+
+### Buttons
+
+* Make the primary action visually clear.
+* Use restrained shapes, consistent sizing, and meaningful labels.
+* Provide visible pressed, focused, disabled, and loading states.
+* Avoid multiple competing primary actions in the same section.
+* Use platform-appropriate button behavior.
+
+### Forms
+
+* Keep labels clear and close to their associated fields.
+* Use appropriate keyboard types and input modes.
+* Display validation messages beside the relevant fields.
+* Preserve entered data when validation fails.
+* Avoid unnecessary steps and repetitive input.
+* Make errors actionable and understandable.
+
+### Navigation
+
+* Keep navigation predictable and consistent.
+* Use platform-appropriate navigation patterns.
+* Clearly identify the current destination.
+* Avoid excessive navigation levels.
+* Preserve navigation state where practical.
+* Use native navigation conventions for iOS and Android instead of forcing identical behavior on both platforms.
+
+## 4. Animation and Interaction
+
+* Use subtle, purposeful animations.
+* Prefer natural easing and short transitions.
+* Provide immediate feedback when users interact with controls.
+* Use transitions to explain changes in state or hierarchy.
+* Avoid animations that delay important actions.
+* Avoid excessive parallax, bouncing, and decorative motion.
+* Respect reduced-motion accessibility preferences.
+* Use native animation APIs where available.
+
+Interactions should feel responsive, predictable, and polished.
+
+## 5. Platform-Specific Implementation
+
+### Web Applications
+
+* Use responsive layouts and fluid sizing.
+* Respect the system font stack and native form-control behavior where appropriate.
+* Use semantic HTML and accessible interactive elements.
+* Implement keyboard navigation and visible focus indicators.
+* Avoid unnecessary hover-only interactions.
+* Support touchscreens, tablets, and desktop screens.
+* Use CSS variables or design tokens for colors, spacing, radii, and typography.
+
+### React and Vue
+
+* Build reusable components with clear responsibilities.
+* Separate presentation, business logic, and data fetching.
+* Reuse existing project architecture and libraries.
+* Avoid duplicating components or introducing unnecessary dependencies.
+* Preserve existing routes, functionality, API contracts, and state management.
+* Use the project's existing styling solution unless a change is necessary.
+
+### React Native and Expo
+
+* Prefer native-feeling navigation, gestures, sheets, and controls.
+* Respect platform-specific safe areas, status bars, and keyboard behavior.
+* Use appropriate touch target sizes, preferably around 44 × 44 pt for iOS controls.
+* Use native platform components or established libraries where practical.
+* Handle Android back navigation correctly.
+* Ensure the interface behaves correctly on different screen sizes and device densities.
+
+### Flutter
+
+* Use reusable widgets and a consistent theme system.
+* Prefer platform-adaptive behavior where it improves usability.
+* Use Cupertino widgets when an explicitly iOS-native experience is required.
+* Use Material conventions for Android where appropriate.
+* Respect SafeArea, text scaling, keyboard insets, and device orientation.
+* Avoid mixing Cupertino and Material styling arbitrarily.
+
+## 6. Responsive Design
+
+* Design for mobile first when the application is primarily mobile.
+* Test narrow phones, large phones, tablets, and desktop layouts as appropriate.
+* Prevent horizontal overflow and clipped content.
+* Use flexible constraints rather than unnecessary fixed dimensions.
+* Keep content readable and controls reachable.
+* Respect device safe areas and system UI.
+* For tablet interfaces, use available space intelligently without simply stretching phone layouts.
+* Test both portrait and landscape layouts when supported.
+
+## 7. Accessibility
+
+* Follow WCAG 2.2 AA for web accessibility where applicable.
+* Use semantic elements and accessible labels.
+* Ensure keyboard navigation works throughout the interface.
+* Maintain sufficient text and control contrast.
+* Support text scaling and screen readers.
+* Never communicate status using color alone.
+* Respect reduced-motion settings.
+* Provide appropriate focus, selected, disabled, and error states.
+
+## 8. Code Quality
+
+Before implementing a design:
+
+1. Inspect the existing project structure.
+2. Identify the framework, styling system, component library, and established conventions.
+3. Reuse existing components and design tokens.
+4. Preserve existing business logic and working features.
+5. Identify the screens and components that actually need changes.
+
+During implementation:
+
+* Write maintainable, production-quality code.
+* Keep components small and reusable where appropriate.
+* Avoid unnecessary dependencies and architectural rewrites.
+* Avoid placeholder interactions in production features.
+* Do not hardcode values that belong in shared design tokens.
+* Do not change API contracts or database schemas for purely visual tasks.
+* Never run database migrations unless explicitly requested.
+* Do not remove existing features just to simplify the UI.
+
+## 9. Design Tokens
+
+Define centralized design tokens appropriate to the existing framework.
+
+Use tokens for:
+
+* Background and surface colors.
+* Primary and secondary text.
+* Accent and semantic colors.
+* Typography sizes and weights.
+* Spacing.
+* Corner radii.
+* Border and separator colors.
+* Shadows and elevation.
+* Animation durations.
+
+Use a consistent spacing scale, such as 4, 8, 12, 16, 24, 32, and 48 units, adjusting to the framework and platform.
+
+Avoid introducing multiple nearly identical colors, radii, or spacing values without a clear reason.
+
+## 10. Anti-Patterns to Avoid
+
+Never introduce these patterns without a specific design justification:
+
+* Generic dashboard templates with excessive cards.
+* Excessive gradients and glass effects.
+* Heavy shadows on every component.
+* Inconsistent corner radii.
+* Random spacing and typography sizes.
+* Emoji used as substitutes for professional icons.
+* Too many accent colors.
+* Excessive pill-shaped controls.
+* Unnecessary animations.
+* Tiny text and inaccessible contrast.
+* Desktop-first layouts for mobile applications.
+* Fake buttons, dead links, or decorative controls that appear interactive.
+* Redesigning unrelated screens without authorization.
+
+## 11. Required Workflow
+
+Whenever asked to create or improve a screen:
+
+1. Inspect the current implementation and related components.
+2. Understand the screen's purpose, user flow, and existing brand.
+3. Identify usability issues and visual inconsistencies.
+4. Implement a cohesive Apple-inspired interface using existing project conventions.
+5. Ensure loading, empty, error, success, and disabled states are handled where applicable.
+6. Verify responsiveness, accessibility, and interactions.
+7. Run appropriate existing checks or tests when practical.
+8. Summarize the files changed and any remaining issues.
+
+Do not stop at a visual mockup when the request requires working code.
+
+## 12. Definition of Done
+
+The implementation is complete when:
+
+* The screen has a clear visual hierarchy.
+* Spacing, typography, colors, and radii are consistent.
+* The interface feels clean and polished.
+* Responsive layouts work at the intended viewport sizes.
+* All controls perform their intended actions.
+* Existing functionality remains intact.
+* Accessibility and platform conventions are respected.
+* No avoidable overflow, console errors, or obvious layout defects remain.
+
+Final objective: Deliver a premium, minimal, accessible, native-feeling interface inspired by Apple's design principles while preserving the product's unique brand and functionality.
