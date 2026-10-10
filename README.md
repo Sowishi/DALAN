@@ -1,56 +1,138 @@
-# Welcome to your Expo app 👋
+# DALAN
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+> **TODO:** One-sentence description of what DALAN is and who it's for.
 
-## Get started
+DALAN is a mobile app built with [React Native](https://reactnative.dev/) and [Expo](https://expo.dev/).
 
-1. Install dependencies
+## About
 
-   ```bash
-   npm install
-   ```
+<!-- Replace this section with the real details -->
 
-2. Start the app
+- **Purpose:** _what problem DALAN solves_
+- **Target users:** _who uses it_
+- **Platforms:** Android, iOS (via Expo Go or development build)
 
-   ```bash
-   npx expo start
-   ```
+## Features
 
-In the output, you'll find options to open the app in a
+- _Feature 1_
+- _Feature 2_
+- _Feature 3_
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## Tech Stack
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+- React Native + Expo
+- _Navigation (e.g. Expo Router / React Navigation)_
+- _Backend / API_
+- _State management_
 
-## Get a fresh project
+## Prerequisites
 
-When you're ready, run:
+- [Node.js](https://nodejs.org/) LTS (v18 or newer)
+- npm or yarn
+- [Git](https://git-scm.com/)
+- **Expo Go** app on your phone ([Android](https://play.google.com/store/apps/details?id=host.exp.exponent) / [iOS](https://apps.apple.com/app/expo-go/id982107779)), or an Android emulator / iOS simulator
+  - Android emulator: [Android Studio](https://developer.android.com/studio)
+  - iOS simulator: Xcode (macOS only)
+
+## Getting Started
+
+### 1. Clone the repository
 
 ```bash
-npm run reset-project
+git clone <your-repo-url>
+cd dalan
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+### 2. Install dependencies
 
-### Other setup steps
+```bash
+npm install
+# or
+yarn install
+```
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+### 3. Set up environment variables
 
-## Learn more
+If the project uses a `.env` file, copy the example and fill in the values:
 
-To learn more about developing your project with Expo, look at the following resources:
+```bash
+cp .env.example .env
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+> Expo exposes only variables prefixed with `EXPO_PUBLIC_` to the app.
 
-## Join the community
+### 4. Start the development server
 
-Join our community of developers creating universal apps.
+```bash
+npx expo start
+```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+A QR code appears in the terminal.
+
+### 5. Run the app
+
+| Target | How |
+| --- | --- |
+| **Physical phone** | Open Expo Go and scan the QR code (Android: scan inside Expo Go; iOS: use the Camera app). Phone and computer must be on the same Wi-Fi. |
+| **Android emulator** | Start an emulator in Android Studio, then press `a` in the terminal. |
+| **iOS simulator** (macOS) | Press `i` in the terminal. |
+| **Web** | Press `w` in the terminal. |
+
+## Useful Commands
+
+```bash
+npx expo start -c        # start with cleared cache
+npx expo start --tunnel  # use a tunnel if LAN connection fails
+npx expo install <pkg>   # install a package version compatible with your Expo SDK
+npx expo-doctor          # diagnose project issues
+```
+
+## Running a Development Build (optional)
+
+Needed when using native modules not supported by Expo Go.
+
+```bash
+npx expo run:android
+npx expo run:ios   # macOS only
+```
+
+## Building for Production
+
+Using [EAS Build](https://docs.expo.dev/build/introduction/):
+
+```bash
+npm install -g eas-cli
+eas login
+eas build:configure
+eas build --platform android   # or ios / all
+```
+
+## Troubleshooting
+
+- **QR code won't connect:** make sure both devices share the same network, or run `npx expo start --tunnel`.
+- **Stale errors or odd behavior:** run `npx expo start -c`.
+- **Dependency mismatch:** run `npx expo install --fix`.
+- **Android emulator not detected:** confirm it's running (`adb devices`) and that `ANDROID_HOME` is set.
+
+## Project Structure
+
+```
+dalan/
+├── app/ or src/      # screens and navigation
+├── assets/           # images, fonts
+├── components/       # reusable UI components
+├── app.json          # Expo configuration
+└── package.json
+```
+
+_Adjust to match the actual structure._
+
+## Contributing
+
+1. Fork the repo and create a feature branch (`git checkout -b feature/my-feature`)
+2. Commit your changes
+3. Push and open a pull request
+
+## License
+
+_Add license information._
