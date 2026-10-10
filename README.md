@@ -1,30 +1,5 @@
 # DALAN
 
-> **TODO:** One-sentence description of what DALAN is and who it's for.
-
-DALAN is a mobile app built with [React Native](https://reactnative.dev/) and [Expo](https://expo.dev/).
-
-## About
-
-<!-- Replace this section with the real details -->
-
-- **Purpose:** _what problem DALAN solves_
-- **Target users:** _who uses it_
-- **Platforms:** Android, iOS (via Expo Go or development build)
-
-## Features
-
-- _Feature 1_
-- _Feature 2_
-- _Feature 3_
-
-## Tech Stack
-
-- React Native + Expo
-- _Navigation (e.g. Expo Router / React Navigation)_
-- _Backend / API_
-- _State management_
-
 ## Prerequisites
 
 - [Node.js](https://nodejs.org/) LTS (v18 or newer)
@@ -51,13 +26,6 @@ npm install
 yarn install
 ```
 
-### 3. Set up environment variables
-
-If the project uses a `.env` file, copy the example and fill in the values:
-
-```bash
-cp .env.example .env
-```
 
 > Expo exposes only variables prefixed with `EXPO_PUBLIC_` to the app.
 
